@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lerobot-webrtc"
+version = "0.1.0"
+description = "LeRobot SO-100/SO-101 leader-to-follower teleoperation over WebRTC"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["aiortc>=1.15,<2", "aiohttp>=3.14.4,<4"]
+
+[project.optional-dependencies]
+hardware = ["lerobot[feetech]==0.6.1"]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.14,<1"]
+
+[project.scripts]
+lerobot-webrtc = "lerobot_webrtc.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lerobot_webrtc"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
