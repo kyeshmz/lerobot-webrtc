@@ -94,7 +94,7 @@ def test_every_banner_label_is_centered_and_pills_use_their_container_centers():
                 box = elements[node.attrib["data-container"]].attrib
                 assert float(node.attrib["x"]) == float(box["x"]) + float(box["width"]) / 2
                 assert float(node.attrib["y"]) == float(box["y"]) + float(box["height"]) / 2
-                assert node.attrib["dominant-baseline"] == "middle"
+                assert node.attrib["dominant-baseline"] == "central"
         for child in node:
             check(child, anchor)
 
@@ -122,6 +122,13 @@ def test_banner_embeds_the_official_huggingface_logo_without_redrawing_it():
     shapes = [(node.tag.rsplit("}", 1)[-1], dict(node.attrib)) for node in logo]
     original_shapes = [(node.tag.rsplit("}", 1)[-1], dict(node.attrib)) for node in official]
     assert shapes == original_shapes
+
+
+def test_title_badges_have_no_off_center_decorations():
+    panel = ElementTree.parse(ROOT / "assets/banner/title-panel.svg").getroot()
+    badges = panel.find(".//{http://www.w3.org/2000/svg}g[@id='title-badges']")
+    assert badges is not None
+    assert [node.tag.rsplit("}", 1)[-1] for node in badges] == ["rect", "text"] * 3
 
 
 def test_banner_is_reproducible_from_its_separate_parts():

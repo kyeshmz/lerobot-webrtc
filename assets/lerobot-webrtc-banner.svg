@@ -35,14 +35,13 @@
         <tspan fill="#80dcff">WebRTC</tspan>
       </text>
       <text x="296" y="152" fill="#bdcddd" font-size="20">Robot control. Two computers. One encrypted link.</text>
-      <g font-size="13" font-weight="550">
+      <g id="title-badges" font-size="13" font-weight="550">
         <rect id="title-python-pill" x="96" y="179" width="122" height="32" rx="16" fill="#183049" stroke="#30485e" />
-        <circle cx="107" cy="195" r="3" fill="#7bdcff" />
-        <text data-container="title-python-pill" x="157" y="195" dominant-baseline="middle" fill="#e1efff">Python 3.12+</text>
+        <text data-container="title-python-pill" x="157" y="195" dominant-baseline="central" fill="#e1efff">Python 3.12+</text>
         <rect id="title-so-pill" x="230" y="179" width="155" height="32" rx="16" fill="#183049" stroke="#30485e" />
-        <text data-container="title-so-pill" x="307.5" y="195" dominant-baseline="middle" fill="#e1efff">SO-100 / SO-101</text>
+        <text data-container="title-so-pill" x="307.5" y="195" dominant-baseline="central" fill="#e1efff">SO-100 / SO-101</text>
         <rect id="title-b601-pill" x="397" y="179" width="100" height="32" rx="16" fill="#183049" stroke="#30485e" />
-        <text data-container="title-b601-pill" x="447" y="195" dominant-baseline="middle" fill="#e1efff">B601-RS</text>
+        <text data-container="title-b601-pill" x="447" y="195" dominant-baseline="central" fill="#e1efff">B601-RS</text>
       </g>
       <text x="296" y="251" fill="#819ab2" font-size="12" font-weight="600" letter-spacing="2">TELEOPERATOR → WEBRTC → ROBOT</text>
     </g>
