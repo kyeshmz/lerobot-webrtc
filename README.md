@@ -163,6 +163,9 @@ before hardware use. Do not use generic SDK `connect()` as a read-only probe.
 
 ## Development & Verification
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, SDK-specific checks,
+package validation and pull request guidance.
+
 ```bash
 uv sync --locked --extra dev
 uv run --no-sync pytest -q

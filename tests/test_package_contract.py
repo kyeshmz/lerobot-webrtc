@@ -1,4 +1,8 @@
+import hashlib
+import json
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from xml.etree import ElementTree
@@ -60,6 +64,7 @@ def test_banner_is_accessible_self_contained_svg_and_python_badge_matches_floor(
     image = ElementTree.fromstring(text)
     assert image.attrib["role"] == "img"
     ids = {node.attrib["id"] for node in image.iter() if "id" in node.attrib}
+    assert len(ids) == sum("id" in node.attrib for node in image.iter())
     assert set(image.attrib["aria-labelledby"].split()).issubset(ids)
     assert all(
         node.tag.rsplit("}", 1)[-1] not in {"script", "foreignObject", "image"}
@@ -94,6 +99,54 @@ def test_every_banner_label_is_centered_and_pills_use_their_container_centers():
             check(child, anchor)
 
     check(image)
+
+
+def test_banner_embeds_the_official_huggingface_logo_without_redrawing_it():
+    image = ElementTree.parse(ROOT / "assets/lerobot-webrtc-banner.svg").getroot()
+    logo = image.find(".//{http://www.w3.org/2000/svg}svg[@id='huggingface-logo']")
+    assert logo is not None
+    source = json.loads((ROOT / "assets/banner/huggingface-logo.source.json").read_text())
+    asset = ROOT / "assets/banner/huggingface-logo.svg"
+    assert source["brand_page"] == "https://huggingface.co/brand"
+    assert source["url"] == (
+        "https://huggingface.co/datasets/huggingface/brand-assets/resolve/"
+        f"{source['revision']}/hf-logo.svg"
+    )
+    assert re.fullmatch(r"[a-f0-9]{40}", source["revision"])
+    assert source["sha256"] == "942cad1ccda905ac5a659dfd2d78b344fccfb84a8a3ac3721e08f488205638a0"
+    assert hashlib.sha256(asset.read_bytes()).hexdigest() == source["sha256"]
+    official = ElementTree.parse(asset).getroot()
+    assert logo.attrib["data-source"] == source["url"]
+    assert logo.attrib["viewBox"] == official.attrib["viewBox"] == "0 0 256 256"
+    assert float(logo.attrib["width"]) / 256 == float(logo.attrib["height"]) / 256
+    shapes = [(node.tag.rsplit("}", 1)[-1], dict(node.attrib)) for node in logo]
+    original_shapes = [(node.tag.rsplit("}", 1)[-1], dict(node.attrib)) for node in official]
+    assert shapes == original_shapes
+
+
+def test_banner_is_reproducible_from_its_separate_parts():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/build_banner.py"), "--check"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_network_diagram_separates_signaling_and_optional_turn_from_joint_data():
+    diagram = ElementTree.parse(ROOT / "assets/banner/network-diagram.svg").getroot()
+    labels = " ".join(diagram.itertext()).upper()
+    for label in ("LEADER", "FOLLOWER", "WEBRTC", "SIGNALING", "TURN", "OPTIONAL"):
+        assert label in labels
+    ids = [node.attrib["id"] for node in diagram.iter() if "id" in node.attrib]
+    assert all(identifier.startswith("diagram-") for identifier in ids)
+    cards = {node.attrib["id"]: node.attrib for node in diagram.iter() if "id" in node.attrib}
+    for node in diagram.iter():
+        if "data-card" in node.attrib:
+            box = cards[node.attrib["data-card"]]
+            assert float(node.attrib["x"]) == float(box["x"]) + float(box["width"]) / 2
 
 
 def test_coturn_template_requires_auth_and_enables_no_placeholder_account():
