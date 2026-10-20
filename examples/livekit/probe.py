@@ -11,6 +11,7 @@ import asyncio
 import json
 import math
 import os
+import secrets
 import sys
 from urllib.parse import urlsplit
 
@@ -50,9 +51,15 @@ async def run_probe(role: str, peer: str, duration: float, url: str, token: str)
     room = rtc.Room()
     received = set()
     disconnected = asyncio.Event()
+    complete = asyncio.Event()
+    confirmed = asyncio.Event()
+    ready = asyncio.Event()
+    started = asyncio.Event()
+    probe_id = secrets.token_hex(16) if role == "send" else None
 
     @room.on("data_received")
     def on_data(packet):
+        nonlocal probe_id
         participant = packet.participant
         if (
             packet.topic != TOPIC
@@ -65,13 +72,34 @@ async def run_probe(role: str, peer: str, duration: float, url: str, token: str)
             data = json.loads(packet.data)
         except (ValueError, UnicodeError):
             return
+        if not isinstance(data, dict):
+            return
+        if role == "send" and data.get("kind") == "probe-ready":
+            ready.set()
         if (
-            isinstance(data, dict)
+            role == "send"
+            and data.get("kind") == "probe-receipt"
+            and data.get("probe_id") == probe_id
+            and type(data.get("received")) is int
+            and data["received"] == 5
+        ):
+            confirmed.set()
+        run_id = data.get("probe_id")
+        if (
+            role == "receive"
             and data.get("kind") == "network-probe"
             and type(data.get("seq")) is int
             and 0 <= data["seq"] < 5
+            and isinstance(run_id, str)
+            and len(run_id) == 32
+            and all(char in "0123456789abcdef" for char in run_id)
+            and probe_id in {None, run_id}
         ):
+            probe_id = run_id
             received.add(data["seq"])
+            started.set()
+            if len(received) == 5:
+                complete.set()
 
     @room.on("disconnected")
     def on_disconnected(*args):
@@ -85,30 +113,67 @@ async def run_probe(role: str, peer: str, duration: float, url: str, token: str)
             )
             if role == "send":
                 async with asyncio.timeout(duration):
-                    while not any(p.identity == peer for p in room.remote_participants.values()):
+                    while not ready.is_set():
                         if disconnected.is_set():
                             raise ConnectionError(
-                                "LiveKit room disconnected before the peer joined"
+                                "LiveKit room disconnected before the peer was ready"
                             )
                         await asyncio.sleep(0.05)
                 for sequence in range(5):
                     await room.local_participant.publish_data(
-                        json.dumps({"kind": "network-probe", "seq": sequence}),
+                        json.dumps(
+                            {"kind": "network-probe", "seq": sequence, "probe_id": probe_id}
+                        ),
                         reliable=False,
                         destination_identities=[peer],
                         topic=TOPIC,
                     )
                     submitted += 1
                     await asyncio.sleep(0.1)
+                try:
+                    async with asyncio.timeout(duration):
+                        await confirmed.wait()
+                except TimeoutError:
+                    pass
             else:
-                await asyncio.sleep(duration)
+                deadline = asyncio.get_running_loop().time() + duration
+                while not started.is_set() and asyncio.get_running_loop().time() < deadline:
+                    if any(p.identity == peer for p in room.remote_participants.values()):
+                        await room.local_participant.publish_data(
+                            json.dumps({"kind": "probe-ready"}),
+                            reliable=True,
+                            destination_identities=[peer],
+                            topic=TOPIC,
+                        )
+                    try:
+                        async with asyncio.timeout(
+                            min(0.2, max(0, deadline - asyncio.get_running_loop().time()))
+                        ):
+                            await started.wait()
+                    except TimeoutError:
+                        pass
+                try:
+                    async with asyncio.timeout(
+                        max(0, deadline - asyncio.get_running_loop().time())
+                    ):
+                        await complete.wait()
+                except TimeoutError:
+                    pass
+                if complete.is_set():
+                    await room.local_participant.publish_data(
+                        json.dumps({"kind": "probe-receipt", "probe_id": probe_id, "received": 5}),
+                        reliable=True,
+                        destination_identities=[peer],
+                        topic=TOPIC,
+                    )
+                await asyncio.sleep(max(0, deadline - asyncio.get_running_loop().time()))
             if disconnected.is_set():
                 raise ConnectionError("LiveKit room disconnected during the probe")
         return {
             "role": role,
             "messages_submitted": submitted,
             "unique_messages_received": len(received),
-            "delivery_verified_by_sender": False,
+            "delivery_verified_by_sender": confirmed.is_set(),
             "unreliable": True,
             "motor_access": False,
         }

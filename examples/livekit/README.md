@@ -6,8 +6,8 @@ permissions and connection lifecycle. It is **not a drop-in URL** for this repo'
 
 [probe.py](probe.py) is a small, finite example using the **real LiveKit Python
 SDK**, pinned independently in inline script metadata. It sends only harmless
-`network-probe` packets. It never imports a robot driver, opens a motor bus, or
-uses the bridge's action topic/protocol.
+readiness messages, `network-probe` packets and delivery receipts. It never imports
+a robot driver, opens a motor bus, or uses the bridge's action topic/protocol.
 
 ## Run against your own LiveKit room
 
@@ -32,11 +32,18 @@ uv run --locked --script examples/livekit/probe.py send --peer probe-receiver --
 ```
 
 The inline SDK dependency and [script lock](probe.py.lock) use an isolated script environment, not the bridge or
-LeRobot hardware environment. The sender submits five `reliable=False` packets,
+LeRobot hardware environment. The receiver first sends bounded, reliable readiness
+messages once the expected sender is visible. The sender waits for readiness from
+that expected identity, then submits five `reliable=False` packets,
 targeted to the other identity on a dedicated probe topic. The receiver counts
-unique packets only from the expected participant/topic. Inspect **receiver output**
-for delivery evidence; sender submission is not delivery confirmation. Loss is
-possible by design. No live room is created or contacted by the automated tests.
+unique packets only from the expected participant/topic and run ID. After all five,
+it sends a reliable receipt on that same topic. The sender keeps the room open
+until that matching receipt or its finite wait deadline, avoiding teardown while
+the receiver is still processing packets. `delivery_verified_by_sender` becomes
+true only after the receipt; submission alone is not delivery confirmation.
+The receiver remains connected for its configured receive window. Keep that
+window longer than the sender's wait, and inspect both outputs: packet loss is
+still possible by design. Automated unit tests do not contact a live room.
 
 ## A future robot backend is a separate integration
 
