@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import sys
 import time
 
-from .arms import AsyncArm
+from .arms import AsyncArm, SimulatedArm
 from .peer import Peer
-from .protocol import FollowerInbox, LeaderInbox
+from .protocol import FollowerInbox, LeaderInbox, decode, envelope
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,10 @@ async def follower_loop(
         if tick >= deadline:
             peer.closed.set()
             raise TimeoutError("Follower watchdog tripped; session stopped, restart both peers")
-        peer.send(inbox.issue_permit(tick))
-        command = inbox.take(tick)
+        b601 = getattr(inbox, "model", None) == "b601-rs"
+        if not b601:
+            peer.send(inbox.issue_permit(tick))
+        command = inbox.take(time.monotonic())
         if command is not None and not peer.closed.is_set():
             watchdog_deadline = deadline
             if await arm.send(
@@ -57,6 +60,15 @@ async def follower_loop(
                 last_applied = applied_at
                 has_applied = True
                 count += 1
+        if b601 and not peer.closed.is_set():
+            # Consume pending commands before spending their freshness budget on telemetry.
+            position = await arm.call("get_observation")
+            observed_at = time.monotonic()
+            deadline = last_applied + inbox.timeout if has_applied else started + startup_timeout
+            if observed_at >= deadline:
+                peer.closed.set()
+                raise TimeoutError("Follower watchdog tripped during feedback; session stopped")
+            peer.send(inbox.issue_permit(observed_at, position))
         if tick - last_log >= 2:
             logger.info("Follower applied %d commands", count)
             last_log = tick
@@ -66,17 +78,51 @@ async def follower_loop(
 async def run_control(
     arm: AsyncArm, peer: Peer, model: str, fps: float, timeout: float, duration: float | None
 ) -> None:
+    verified = asyncio.Event()
+    challenge = secrets.token_hex(16)
     if peer.role == "leader":
         inbox = LeaderInbox(model)
-        peer.on_message = inbox.receive
+
+        def receive(message):
+            response = inbox.receive(message)
+            if response is not None:
+                if isinstance(arm.arm, SimulatedArm) and inbox.simulated is False:
+                    raise ValueError(
+                        "Synthetic B601 leader cannot activate physical hardware; use bench"
+                    )
+                peer.send(response)
+
+        peer.on_message = receive
         loop = leader_loop(arm, peer, inbox, fps)
     else:
-        inbox = FollowerInbox(model, timeout)
-        peer.on_message = lambda message: inbox.receive(message, time.monotonic())
+        inbox = FollowerInbox(model, timeout, simulated=isinstance(arm.arm, SimulatedArm))
+
+        def receive(message):
+            if model == "b601-rs":
+                data = decode(message, model, ("ready", "action"))
+                if data["type"] == "ready":
+                    if data["permit"] != challenge or data.get("role") != "leader":
+                        raise ValueError("Invalid B601 model handshake")
+                    verified.set()
+                    return
+            inbox.receive(message, time.monotonic())
+
+        peer.on_message = receive
         loop = follower_loop(arm, peer, inbox, fps)
     # Install handlers before negotiating, so no initial message is lost.
     try:
         await peer.connect()
+        if model == "b601-rs" and peer.role == "follower":
+            async with asyncio.timeout(5):
+                while not verified.is_set():
+                    if peer.closed.is_set():
+                        raise peer.error or ConnectionError(
+                            "Peer ended before B601 model handshake"
+                        )
+                    peer.send(envelope(model, "hello", permit=challenge, simulated=inbox.simulated))
+                    await asyncio.sleep(0.05)
+        if peer.closed.is_set():
+            raise peer.error or ConnectionError("Peer ended before arm connection")
         await arm.call("connect")
         logger.info("%s connected; control running at %.1f Hz", peer.role, fps)
         tasks = {asyncio.create_task(loop), asyncio.create_task(peer.closed.wait())}

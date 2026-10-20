@@ -1,0 +1,71 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  software:
+    name: Local WebRTC (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --extra dev
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync pytest -q --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: software-${{ matrix.os }}
+          path: test-results.xml
+          if-no-files-found: ignore
+
+  lerobot-api:
+    name: Real LeRobot drivers (no motors)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --extra dev --extra hardware
+      - run: uv run --no-sync pytest -q -m hardware_api --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lerobot-api
+          path: test-results.xml
+          if-no-files-found: ignore
+
+  b601-api:
+    name: Real B601 driver (no CAN)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --extra dev --extra hardware --extra b601
+      - run: uv pip install 'lerobot[rebot] @ git+https://github.com/huggingface/lerobot.git@ca69a2068462a37f7cdcb74180927a2f863d2bf7'
+      - run: uv run --no-sync pytest -q -m b601_api --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: b601-api
+          path: test-results.xml
+          if-no-files-found: ignore

@@ -1034,6 +1034,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+b601 = [
+    { name = "motorbridge" },
+]
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1048,11 +1051,12 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.14.4,<4" },
     { name = "aiortc", specifier = ">=1.15,<2" },
     { name = "lerobot", extras = ["feetech"], marker = "extra == 'hardware'", specifier = "==0.6.1" },
+    { name = "motorbridge", marker = "extra == 'b601'", specifier = "==0.5.6" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1,<2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14,<1" },
 ]
-provides-extras = ["hardware", "dev"]
+provides-extras = ["hardware", "b601", "dev"]
 
 [[package]]
 name = "markupsafe"
@@ -1174,6 +1178,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/3a/41/580bb4006e3ed0361b8151a01d324fb03f420815446c7def45d02f74c270/mergedeep-1.3.4.tar.gz", hash = "sha256:0096d52e9dad9939c3d975a774666af186eda617e6ca84df4c94dec30004f2a8", size = 4661, upload-time = "2021-02-05T18:55:30.623Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/19/04f9b178c2d8a15b076c8b5140708fa6ffc5601fb6f1e975537072df5b2a/mergedeep-1.3.4-py3-none-any.whl", hash = "sha256:70775750742b25c0d8f36c55aed03d24c3384d17c951b3175d898bd778ef0307", size = 6354, upload-time = "2021-02-05T18:55:29.583Z" },
+]
+
+[[package]]
+name = "motorbridge"
+version = "0.5.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/be/3c5fc8f1166119c0d5e8e4cb8452481ad50253117f4f251018b98070004c/motorbridge-0.5.6.tar.gz", hash = "sha256:07abecd895f173b3b790fac114e0fe8e02a4ba87f9de71299b5c2a1b70a3bca4", size = 42965, upload-time = "2026-09-20T09:50:25.808Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/63/f224844b78ade34040f37622fd83865e37a64b79caaed89953030763000d/motorbridge-0.5.6-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4530ec25a5f4411c62bd8d3eb3063e54193379e99c064991df73e6797a884a3a", size = 1250541, upload-time = "2026-09-20T09:50:15.495Z" },
+    { url = "https://files.pythonhosted.org/packages/63/9e/8fff58a53aa6997a7792425aa9d49646641ec574f399a30f1a60933a18d6/motorbridge-0.5.6-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5349821bedfe63f60a196f967dd7892029bd925d3e5e35b258bde50182bc3478", size = 1351233, upload-time = "2026-09-20T09:50:16.672Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/95/109590e8f82e3078a2d27e241ab3b4e4d0445502eed87f33e661d1c6a725/motorbridge-0.5.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b05438f6c086b63ebc90b57e115949d4ae0dcdeb977b5f45f27f2a9af816b3e0", size = 1370149, upload-time = "2026-09-20T09:50:17.867Z" },
+    { url = "https://files.pythonhosted.org/packages/09/5a/b9cb201294acd1c0c136d63fdb855451be3364bafc6ce9a9a4ff3741608e/motorbridge-0.5.6-cp312-cp312-win_amd64.whl", hash = "sha256:c738539994dcf4836d133a89a7b7d0bdcbe5baa9fe0a2ecd5017780c8241bc64", size = 1034047, upload-time = "2026-09-20T09:50:18.927Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/28/c288c187ea273cb20ac5cc52c712d692fc4f57dc5b985ddedc1034550256/motorbridge-0.5.6-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:4c80988b84e343cfcf780eab133f97fcd9fc01bc8e3cc24339b8868c42b9b6ae", size = 1250542, upload-time = "2026-09-20T09:50:20.043Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/e1/d1fc99c4642de1732f885a15aeb13af77f7c4a959313f4f7a501124a4593/motorbridge-0.5.6-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c5c0d35c99f081744ac552d5a22880c8a1a328977b87e3a2ee5e042b70b2a23a", size = 1351234, upload-time = "2026-09-20T09:50:21.254Z" },
+    { url = "https://files.pythonhosted.org/packages/15/98/e2722451180e44e32065b36632310d6d912bd7a56f0b9b08ba332719ecb1/motorbridge-0.5.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:477ad331a90b0aab0c38069db11f40dbe1c3496aa15d0278cc72a66899aaa673", size = 1370150, upload-time = "2026-09-20T09:50:22.406Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/a1/ee0f289ec503933f04df539badcaa1a0243d4efef43580e35f872b7e56c1/motorbridge-0.5.6-cp313-cp313-win_amd64.whl", hash = "sha256:99e0c128b86409ecb0a259a53599fd974e8d998cacb95a4e3299193ebb14921e", size = 1034046, upload-time = "2026-09-20T09:50:23.376Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/06/c1aaa315ba0e6404b97ee601e95afb344a8047f7d7b05c94eb4af9a9c97d/motorbridge-0.5.6-cp314-cp314-win_amd64.whl", hash = "sha256:dfe5d5c52d7260af394e5212e7fa83250e83c8403ea99ad6961cf90b8511fb56", size = 1070679, upload-time = "2026-09-20T09:50:24.829Z" },
 ]
 
 [[package]]

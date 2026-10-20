@@ -23,6 +23,37 @@ def test_hardware_follower_requires_arm(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["bench"], "explicit --execute"),
+        (["bench", "--simulate", "--offset", "nan"], "at most 1 degree"),
+        (["bench", "--simulate", "--offset", "2"], "at most 1 degree"),
+        (["bench", "--simulate", "--duration", "60"], "duration 3–15"),
+        (["bench", "--simulate", "--execute"], "not both"),
+        (["leader", "--robot", "b601-rs", "--port", "can1", "--id", "arm"], "follower-only"),
+        (
+            ["follower", "--robot", "b601-rs", "--port", "can1", "--id", "arm", "--arm"],
+            "--can-lock",
+        ),
+    ],
+)
+def test_b601_options_fail_before_endpoint_or_motor_access(monkeypatch, capsys, arguments, message):
+    monkeypatch.setenv("LEROBOT_WEBRTC_TOKEN", "test-secret-at-least-16-characters")
+    monkeypatch.setattr("sys.argv", ["lerobot-webrtc", *arguments])
+    with pytest.raises(SystemExit) as status:
+        main()
+    assert status.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_bench_return_to_start_is_explicitly_optional():
+    from lerobot_webrtc.cli import parser
+
+    assert not parser().parse_args(["bench", "--simulate"]).require_return
+    assert parser().parse_args(["bench", "--simulate", "--require-return"]).require_return
+
+
+@pytest.mark.parametrize(
     ("argument", "value"),
     [
         ("--signaling", "ws://user:pass@localhost:8080"),
