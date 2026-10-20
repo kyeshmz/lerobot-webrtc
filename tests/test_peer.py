@@ -109,3 +109,18 @@ def test_rejects_unreliable_channel_mismatch(channel):
     peer.attach(channel)
     assert isinstance(peer.error, ValueError)
     assert peer.closed.is_set()
+
+
+async def test_native_and_standalone_channels_do_not_cross_activate():
+    from lerobot_webrtc.native_protocol import NATIVE_LABEL
+
+    peer = Peer("follower", "ws://127.0.0.1:1", "native", "secret", channel_label=NATIVE_LABEL)
+    try:
+        peer.attach(
+            SimpleNamespace(label=LABEL, ordered=False, maxRetransmits=0, maxPacketLifeTime=None)
+        )
+        assert peer.closed.is_set()
+        assert not peer.opened.is_set()
+        assert peer.channel is None
+    finally:
+        await peer.close()

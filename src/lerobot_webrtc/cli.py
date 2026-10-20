@@ -16,6 +16,7 @@ from .arms import AsyncArm, LeRobotArm, SimulatedArm
 from .b601 import B601Arm
 from .bench import run_bench
 from .models import MODELS
+from .network import signaling_url, stun_url, turn_url
 from .peer import Peer
 from .runtime import run_control
 from .signaling import create_app
@@ -39,65 +40,6 @@ def server_port(value: str) -> int:
     return port
 
 
-def signaling_url(value: str) -> str:
-    try:
-        url = urlparse(value)
-        port = url.port
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("Invalid signaling URL or port") from exc
-    if (
-        url.scheme not in {"ws", "wss"}
-        or not url.hostname
-        or url.username is not None
-        or url.password is not None
-        or url.query
-        or url.fragment
-        or (port is not None and not 1 <= port <= 65535)
-    ):
-        raise argparse.ArgumentTypeError(
-            "Signaling must be ws:// or wss:// without userinfo, query, or fragment"
-        )
-    return value
-
-
-def ice_url(value: str, schemes: set[str], label: str) -> str:
-    try:
-        scheme, rest = value.split(":", 1)
-        if scheme not in schemes or not rest or rest.startswith("//"):
-            raise ValueError("invalid URI scheme or authority")
-        authority, separator, query = rest.partition("?")
-        if "#" in authority or "@" in authority or "/" in authority or "\\" in authority:
-            raise ValueError("invalid URI authority")
-        if separator and (label != "TURN" or query not in {"transport=udp", "transport=tcp"}):
-            raise ValueError("unsupported URI option")
-        if scheme == "turns" and separator and query != "transport=tcp":
-            raise ValueError("secure TURN requires TCP")
-        host, colon, port_text = authority.rpartition(":")
-        if not colon:
-            host, port_text = authority, ""
-        if not host or any(c.isspace() for c in host) or ":" in host:
-            raise ValueError("invalid host")
-        if port_text:
-            if not port_text.isascii() or not port_text.isdecimal():
-                raise ValueError("invalid port")
-            port = int(port_text)
-            if not 1 <= port <= 65535:
-                raise ValueError("invalid port")
-        elif colon:
-            raise ValueError("empty port")
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"Invalid {label} URL or port") from exc
-    return value
-
-
-def stun_url(value: str) -> str:
-    return ice_url(value, {"stun"}, "STUN")
-
-
-def turn_url(value: str) -> str:
-    return ice_url(value, {"turn", "turns"}, "TURN")
-
-
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="LeRobot leader/follower teleoperation over WebRTC")
     root.add_argument("--verbose", action="store_true")
@@ -105,7 +47,7 @@ def parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Run the authenticated SDP signaling server")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=server_port, default=8080)
-    for role in ("leader", "follower", "calibrate"):
+    for role in ("leader", "follower", "host", "calibrate"):
         command = sub.add_parser(role)
         models = ("so101", "so100") if role == "calibrate" else MODELS
         command.add_argument("--robot", choices=models, default="so101")
@@ -120,7 +62,7 @@ def parser() -> argparse.ArgumentParser:
             "--simulate", action="store_true", help="No hardware or LeRobot required"
         )
         command.add_argument("--signaling", type=signaling_url, default="ws://127.0.0.1:8080")
-        command.add_argument("--room", default="arm")
+        command.add_argument("--room", default="native" if role == "host" else "arm")
         command.add_argument("--fps", type=positive, default=30.0)
         command.add_argument("--timeout", type=positive, default=0.3)
         command.add_argument(
@@ -141,7 +83,7 @@ def parser() -> argparse.ArgumentParser:
                 const=8081,
                 help="Opt in to a native WebRTC browser viewer on 127.0.0.1 (default port 8081)",
             )
-        if role == "follower":
+        if role in {"follower", "host"}:
             source = command.add_mutually_exclusive_group()
             source.add_argument(
                 "--camera-index", type=int, help="Explicit LeRobot/OpenCV camera index"
@@ -215,14 +157,14 @@ def ice_servers(args) -> list[RTCIceServer]:
     return servers
 
 
-async def endpoint(args, token: str) -> None:
+def media_options(args, token: str) -> dict:
     media = {}
     settings = getattr(args, "video_settings", None)
     if settings is not None:
         if args.command == "leader":
             from .video_viewer import WebRTCViewer
 
-            media["video_viewer"] = WebRTCViewer(token, args.view_video, settings)
+            media["video_receiver"] = WebRTCViewer(token, args.view_video, settings)
         else:
             from .video_sources import LeRobotCameraTrack, SyntheticVideoTrack
 
@@ -231,29 +173,71 @@ async def endpoint(args, token: str) -> None:
                 if args.test_video
                 else LeRobotCameraTrack(args.camera_index, settings)
             )
-    peer = Peer(args.command, args.signaling, args.room, token, ice_servers(args), **media)
+    return media
+
+
+def make_device(args, peer: Peer):
+    role = "follower" if args.command == "host" else args.command
+    if args.simulate:
+        return SimulatedArm(args.max_relative_target, args.robot)
+    if args.robot == "b601-rs":
+        return B601Arm(
+            args.port,
+            args.id,
+            args.max_relative_target,
+            args.on_exit,
+            args.can_lock,
+            args.max_speed,
+            session_active=lambda: not peer.closed.is_set(),
+        )
+    return LeRobotArm(role, args.robot, args.port, args.id, args.max_relative_target, args.on_exit)
+
+
+async def endpoint(args, token: str) -> None:
+    peer = Peer(
+        args.command,
+        args.signaling,
+        args.room,
+        token,
+        ice_servers(args),
+        **media_options(args, token),
+    )
     try:
-        if args.simulate:
-            device = SimulatedArm(args.max_relative_target, args.robot)
-        elif args.robot == "b601-rs":
-            device = B601Arm(
-                args.port,
-                args.id,
-                args.max_relative_target,
-                args.on_exit,
-                args.can_lock,
-                args.max_speed,
-                session_active=lambda: not peer.closed.is_set(),
-            )
-        else:
-            device = LeRobotArm(
-                args.command, args.robot, args.port, args.id, args.max_relative_target, args.on_exit
-            )
+        device = make_device(args, peer)
     except BaseException:
         await peer.close()
         raise
     arm = AsyncArm(device, args.command)
     await run_control(arm, peer, args.robot, args.fps, args.timeout, args.duration)
+
+
+async def robot_host_endpoint(args, token: str) -> None:
+    from .native_host import run_robot_host
+    from .native_protocol import NATIVE_LABEL
+
+    peer = Peer(
+        "follower",
+        args.signaling,
+        args.room,
+        token,
+        ice_servers(args),
+        channel_label=NATIVE_LABEL,
+        **media_options(args, token),
+    )
+    try:
+        device = make_device(args, peer)
+    except BaseException:
+        await peer.close()
+        raise
+    await run_robot_host(
+        AsyncArm(device, "follower"),
+        peer,
+        args.robot,
+        args.fps,
+        args.timeout,
+        args.duration,
+        robot_id=args.id or "simulated",
+    )
 
 
 async def bench_endpoint(args, token: str) -> None:
@@ -282,12 +266,12 @@ def main() -> None:
     token = os.environ.get("LEROBOT_WEBRTC_TOKEN", "")
     if args.command != "calibrate" and len(token) < 16:
         root.error("Set LEROBOT_WEBRTC_TOKEN to a shared secret of at least 16 characters")
-    if args.command in {"leader", "follower", "calibrate"}:
+    if args.command in {"leader", "follower", "host", "calibrate"}:
         simulated = getattr(args, "simulate", False)
         if not simulated and (not args.port or not args.id):
             root.error("Real hardware requires --port and --id; calibrate using the same ID first")
-    if args.command in {"leader", "follower", "bench"}:
-        if args.command == "follower" and not args.simulate and not args.arm:
+    if args.command in {"leader", "follower", "host", "bench"}:
+        if args.command in {"follower", "host"} and not args.simulate and not args.arm:
             root.error("Real follower motion requires explicit --arm")
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", args.room):
             root.error("Room must be 1–64 letters, digits, underscores, or hyphens")
@@ -324,7 +308,7 @@ def main() -> None:
             }
             if not enabled_video and video_values:
                 root.error("Video settings require --view-video, --test-video, or --camera-index")
-            if args.command == "follower":
+            if args.command in {"follower", "host"}:
                 if args.camera_index is not None and args.camera_index < 0:
                     root.error("Camera index must be nonnegative")
                 if args.camera_fourcc is not None and args.camera_index is None:
@@ -365,6 +349,8 @@ def main() -> None:
             calibrate(args)
         elif args.command == "bench":
             asyncio.run(bench_endpoint(args, token))
+        elif args.command == "host":
+            asyncio.run(robot_host_endpoint(args, token))
         else:
             asyncio.run(endpoint(args, token))
     except KeyboardInterrupt:

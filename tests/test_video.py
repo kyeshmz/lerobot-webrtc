@@ -106,6 +106,7 @@ async def test_peer_waits_for_browser_before_signaling_and_frames_before_connect
         def __init__(self):
             self.started = asyncio.Event()
             self.browser_ready = asyncio.Event()
+            self.signaling_ready = self.browser_ready
             self.ready = asyncio.Event()
             self.closed = False
 

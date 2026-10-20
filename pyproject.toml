@@ -17,6 +17,7 @@ dependencies = ["aiortc>=1.15,<2", "aiohttp>=3.14.4,<4"]
 
 [project.optional-dependencies]
 hardware = ["lerobot[feetech]==0.6.1"]
+native = ["lerobot[core_scripts,feetech]==0.6.1"]
 b601 = ["motorbridge==0.5.6"]
 dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.14,<1"]
 
@@ -24,15 +25,16 @@ dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.14,<1"]
 lerobot-webrtc = "lerobot_webrtc.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lerobot_webrtc"]
+packages = ["src/lerobot_webrtc", "src/lerobot_robot_webrtc"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-m 'not hardware_api and not b601_api'"
+addopts = "-m 'not hardware_api and not b601_api and not native_api'"
 markers = [
     "hardware_api: installed SO LeRobot drivers with an in-memory motor bus, no physical I/O",
     "b601_api: installed B601 LeRobot driver with a fake MotorBridge, no physical I/O",
+    "native_api: installed LeRobot native scripts and plugin workflows with simulated devices",
 ]
 
 [tool.ruff]

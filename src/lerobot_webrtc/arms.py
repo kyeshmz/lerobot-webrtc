@@ -8,10 +8,11 @@ import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 from .b601 import B601Arm
 from .models import arm_model
-from .protocol import JOINTS, validate_action
+from .protocol import JOINTS, validate_action, validate_observation
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class LeRobotArm:
             )
         self.device = device_cls(config_cls(**options))
         self.role = role
+        self.model = model
 
     def connect(self) -> None:
         # Never enter an interactive calibration procedure during a network session.
@@ -60,11 +62,24 @@ class LeRobotArm:
     def send_action(self, action: dict[str, float]) -> dict[str, float]:
         return self.device.send_action(action)
 
+    def get_observation(self) -> dict[str, float]:
+        # The SDK's get_observation also reads cameras. Keep only motor I/O on
+        # this worker; video has its own owner and lifetime in Peer.
+        positions = self.device.bus.sync_read(
+            "Present_Position", num_retry=getattr(self.device.config, "num_read_retries", 0)
+        )
+        return validate_observation(
+            {
+                joint: positions[joint.removesuffix(".pos")]
+                for joint in arm_model(self.model).joints
+            },
+            self.model,
+        )
+
     def hold(self) -> None:
         if not self.device.is_connected or not self.device.is_calibrated:
             return
-        observation = self.device.get_observation()
-        self.device.send_action({joint: observation[joint] for joint in JOINTS})
+        self.device.send_action(self.get_observation())
 
     def disconnect(self) -> None:
         # Also clean up when connect() failed after opening the serial bus.
@@ -110,6 +125,14 @@ class SimulatedArm:
 
     def disconnect(self) -> None:
         self.connected = False
+
+
+@dataclass(frozen=True)
+class SendResult:
+    """Worker admission and the driver's actual return value are separate facts."""
+
+    accepted: bool
+    action: object | None = None
 
 
 class AsyncArm:
@@ -159,24 +182,34 @@ class AsyncArm:
         deadline: float,
         session_active=lambda: True,
     ) -> bool:
+        return (await self.send_with_result(action, deadline, session_active)).accepted
+
+    async def send_with_result(
+        self,
+        action: dict[str, float],
+        deadline: float,
+        session_active=lambda: True,
+    ) -> SendResult:
         with self._state_lock:
             if self._closing:
-                return False
+                return SendResult(False)
 
         def guarded_send():
             with self._state_lock:
                 if self._closing or time.monotonic() >= deadline or not session_active():
-                    return False
+                    return SendResult(False)
             if isinstance(self.arm, B601Arm):
-                self.arm.send_action(action, deadline=deadline, session_active=session_active)
+                result = self.arm.send_action(
+                    action, deadline=deadline, session_active=session_active
+                )
             else:
-                self.arm.send_action(action)
-            return True
+                result = self.arm.send_action(action)
+            return SendResult(True, result)
 
         # Keep admission and submission atomic with close() latching shutdown.
         with self._state_lock:
             if self._closing:
-                return False
+                return SendResult(False)
             concurrent_future = self.executor.submit(guarded_send)
         future = asyncio.wrap_future(concurrent_future)
         try:

@@ -10,23 +10,22 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import math
-from collections.abc import Callable
-from contextlib import suppress
+import logging
 from hmac import compare_digest
 
 from aiohttp import BasicAuth, web
 from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
-from aiortc.mediastreams import MediaStreamError, MediaStreamTrack
+from aiortc.mediastreams import MediaStreamError
 from av import VideoFrame
 
 from .video import (
-    MAX_VIDEO_HEIGHT,
-    MAX_VIDEO_WIDTH,
     VideoSettings,
     prefer_video_codec,
     validate_video_sdp,
 )
+from .video_receiver import VideoReceiver
+
+logger = logging.getLogger(__name__)
 
 MAX_REQUEST_SIZE = 65536
 SETUP_TIMEOUT = 15.0
@@ -154,7 +153,7 @@ class _LatestVideoTrack(VideoStreamTrack):
             viewer._fail(ConnectionError("Browser video relay ended unexpectedly"))
 
 
-class WebRTCViewer:
+class WebRTCViewer(VideoReceiver):
     def __init__(
         self,
         token: str,
@@ -166,36 +165,25 @@ class WebRTCViewer:
             raise ValueError("Viewer token must be nonempty")
         if type(port) is not int or not 0 <= port <= 65535:
             raise ValueError("Viewer port must be between 0 and 65535")
-        if not math.isfinite(frame_timeout) or frame_timeout <= 0:
-            raise ValueError("Frame timeout must be finite and positive")
+        super().__init__(settings, frame_timeout)
         self.port = port
-        self.settings = settings or VideoSettings()
-        self.frame_timeout = frame_timeout
-        self.on_error: Callable[[Exception], None] = lambda error: None
-        self.started = asyncio.Event()
         self.browser_ready = asyncio.Event()
-        self.ready = asyncio.Event()
-        self.frames_received = 0
         self._password = token.encode()
-        self._closing = False
-        self._error: Exception | None = None
         self._runner: web.AppRunner | None = None
         self._pc: RTCPeerConnection | None = None
         self._outgoing: _LatestVideoTrack | None = None
-        self._source: MediaStreamTrack | None = None
-        self._frame: VideoFrame | None = None
-        self._generation = 0
-        self._frame_changed = asyncio.Event()
         self._start_task: asyncio.Task | None = None
         self._offer_task: asyncio.Task | None = None
         self._setup_task: asyncio.Task | None = None
-        self._receive_task: asyncio.Task | None = None
-        self._close_task: asyncio.Task | None = None
         self._cleanup_tasks: set[asyncio.Task] = set()
 
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
+
+    @property
+    def signaling_ready(self) -> asyncio.Event:
+        return self.browser_ready
 
     async def start(self) -> None:
         if self._closing:
@@ -218,6 +206,7 @@ class WebRTCViewer:
         await site.start()
         self.port = self._runner.addresses[0][1]
         self.started.set()
+        logger.info("Video viewer: %s (user: viewer; password: LEROBOT_WEBRTC_TOKEN)", self.url)
 
     @web.middleware
     async def _secure(self, request: web.Request, handler) -> web.StreamResponse:
@@ -352,73 +341,13 @@ class WebRTCViewer:
     async def _close_browser(self, pc: RTCPeerConnection) -> None:
         await asyncio.gather(pc.close(), return_exceptions=True)
 
-    def attach(self, track: MediaStreamTrack) -> None:
-        if track.kind != "video":
-            raise ValueError("Viewer accepts video only")
-        if self._source is not None:
-            raise ValueError("Viewer accepts only one source track")
-        if self._closing or self._error is not None:
-            raise RuntimeError("Viewer is closed or failed")
-        self._source = track
-        track.on("ended", self._source_ended)
-        self._receive_task = asyncio.create_task(self._receive(), name="viewer-video-receiver")
-
-    def _source_ended(self) -> None:
-        self._fail(ConnectionError("Remote video track ended unexpectedly"))
-
-    async def _receive(self) -> None:
-        try:
-            while not self._closing and self._error is None:
-                async with asyncio.timeout(self.frame_timeout):
-                    frame = await self._source.recv()
-                if self._closing or self._error is not None:
-                    return
-                if not isinstance(frame, VideoFrame) or not (
-                    0 < frame.width <= MAX_VIDEO_WIDTH and 0 < frame.height <= MAX_VIDEO_HEIGHT
-                ):
-                    raise ValueError("Decoded video frame exceeds permitted dimensions")
-                self._frame = frame
-                self._generation += 1
-                self.frames_received += 1
-                self.ready.set()
-                self._frame_changed.set()
-        except asyncio.CancelledError:
-            raise
-        except TimeoutError:
-            self._fail(TimeoutError("Remote video frame timeout"))
-        except MediaStreamError:
-            self._fail(ConnectionError("Remote video track ended unexpectedly"))
-        except Exception as exc:
-            self._fail(exc)
-        finally:
-            # An exception traceback may outlive the receiver in the parent's error.
-            frame = None
-
-    def _fail(self, error: Exception) -> None:
-        if not self._closing and self._error is None:
-            self._error = error
-            self._frame = None
-            self._frame_changed.set()
-            with suppress(Exception):
-                self.on_error(error)
-
-    async def close(self) -> None:
-        if self._close_task is None:
-            self._closing = True
-            self._close_task = asyncio.create_task(self._close_owned(), name="viewer-close")
-        await asyncio.shield(self._close_task)
-
     async def _close_owned(self) -> None:
-        tasks = [self._start_task, self._offer_task, self._setup_task, self._receive_task]
+        tasks = [self._start_task, self._offer_task, self._setup_task]
         for task in tasks:
             if task is not None:
                 task.cancel()
         await asyncio.gather(*(task for task in tasks if task is not None), return_exceptions=True)
-        if self._source is not None:
-            with suppress(Exception):
-                self._source.remove_listener("ended", self._source_ended)
-                self._source.stop()
-            self._source = None
+        await super()._close_owned()
         if self._pc is not None:
             await self._retire_browser(self._pc)
         await asyncio.gather(*self._cleanup_tasks, return_exceptions=True)

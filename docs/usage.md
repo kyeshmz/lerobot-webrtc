@@ -1,8 +1,14 @@
 # LeRobot WebRTC usage guide
 
-Run these commands from the repository root. See the [README](../README.md) for
-the quick start, supported LeRobot versions, and the upstream hardware guides.
-Commands named `lerobot-webrtc` belong to this bridge, not LeRobot's own CLI.
+This guide preserves the **standalone CLI**, browser video, calibration, and
+hardware-safety workflows. To use normal **`lerobot-teleoperate`** or SDK-owned
+recording with WebRTC, start with the [native Robot guide](../examples/native/README.md)
+and [README installation](../README.md#install-lerobot-and-the-bridge).
+Native mode uses `lerobot-webrtc host`; standalone mode uses `follower` +
+`leader`. Their data-channel protocols are deliberately incompatible.
+
+Run checkout/example commands from the repository root. Commands named
+`lerobot-webrtc` belong to this bridge, not LeRobot's own CLI.
 
 Control a **LeRobot SO-100 or SO-101 follower arm from a physical leader arm over
 WebRTC**, with each arm plugged into its own computer. Also includes an opt-in
@@ -24,56 +30,70 @@ Both computers ── authenticated WebSocket ── Signaling server
 ## What is included
 
 - SO-100 and SO-101 leader/follower adapters using **LeRobot 0.6.1**.
+- An optional native `Robot` plugin for normal SDK commands, with explicit
+  discovery, a separate `host`, and optional headless camera observations.
 - An `aiortc` unordered data channel with `maxRetransmits=0`. Old commands are
   dropped instead of retransmitted; a latest-only mailbox avoids a motion backlog.
 - Shared-secret signaling, one leader and one follower per room.
 - Follower-issued expiring permits, sequence checks, joint/value validation,
   local watchdog, and LeRobot's relative-target limiter.
 - Dedicated, serialized hardware I/O worker and best-effort hold on exit.
-- Optional single follower video track and receive-only loopback browser viewer;
-  cameras are off by default, with no audio or recording.
+- Optional single follower video track: headless RGB observations in native
+  mode, or a receive-only loopback browser viewer in standalone mode. Cameras
+  are off by default; there is no audio or bridge-owned recording.
 - Simulation and tests that establish actual local WebRTC connections.
 - A separate B601-RS schema, guarded LeRobot startup and shutdown, shared CAN
   ownership check, and a small network-only bench source.
 
 **Scope:** SO transports six normalized positions; B601-RS transports seven joint
 angles in degrees, including `wrist_yaw` and the angular gripper. Both control
-endpoints remain Python programs; the optional browser only receives video. It
-does not record datasets, run policies, provide force feedback, or accept browser
-arm commands. Other LeRobot arms need an adapter and a matching protocol joint schema.
+endpoints remain Python programs; the standalone browser only receives video.
+The SDK, not the bridge, owns datasets and policy execution through the native
+Robot API, [subject to strict cadence and recording limits](../examples/native/README.md#cadence-stop-and-rollout-limits).
+There is no Teleoperator plugin, force feedback, or browser arm control. Other
+LeRobot arms need an adapter and a matching protocol joint schema.
 
 ## How this differs from other LeRobot + WebRTC options
 
 |  | This repo | `lerobot` PR #3962 | `koenvanwijk/lerobot-*` | `videosdk-teleop` |
 | --- | --- | --- | --- | --- |
-| Direction | Leader arm → follower arm | Cloud app → remote robot | Any teleop → any robot | Any teleop/robot + recording |
-| Media | Joints; optional single camera and local receive-only browser viewer | Joints + camera | Negotiated action dicts | Frames + joints, correlated IDs |
+| Direction | SDK Robot proxy or standalone leader → follower | Cloud app → remote robot | Any teleop → any robot | Any teleop/robot + recording |
+| Media | Joints; optional native RGB observations or standalone browser viewer | Joints + camera | Negotiated action dicts | Frames + joints, correlated IDs |
 | Network | `aiortc` P2P, self-hosted signaling | `aiortc` or LiveKit SFU | WebRTC + matchmaker (self/hosted) | Hosted VideoSDK SFU |
-| Recording | None | Via `Robot` API | None advertised | LeRobot dataset export |
+| Recording | SDK-owned via optional `Robot` plugin; label/cadence caveats | Via `Robot` API | None advertised | LeRobot dataset export |
 
 Full detail: [COMPARISON.md](../COMPARISON.md).
 
 ## Install
 
-Use **Python 3.12+**. With [uv](https://docs.astral.sh/uv/):
+Use an **isolated Python 3.12 environment on each arm computer**. The bridge is
+not published to PyPI. For Git installation of both SDK and bridge, use
+`'lerobot-webrtc[native] @ git+https://github.com/kyeshmz/lerobot-webrtc.git'`
+on a native SDK operator and the same requirement with `[hardware]` on an SO
+robot host. See the [complete pip instructions](../README.md#install-lerobot-and-the-bridge).
+
+For a checkout, with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv venv --python 3.12
+uv sync --locked --python 3.12
 source .venv/bin/activate
-uv pip install -e '.[dev]'
 ```
 
-For physical SO arms, install on **both arm computers**:
+For **standalone physical SO** control, install on **both arm computers**:
 
 ```bash
-uv pip install -e '.[hardware]'
+uv sync --locked --python 3.12 --extra hardware
 ```
 
-Or use `python3.12 -m venv .venv` and `python -m pip install -e '.[hardware,dev]'`.
-The signaling machine only needs `pip install -e .`. LeRobot's hardware extra
-also installs its base dependencies, including PyTorch; simulation does not.
+For native SDK commands, use `--extra native` on the operator instead; it adds
+`lerobot[core_scripts,feetech]==0.6.1` along with the bridge/plugin. The SO host's
+`hardware` extra adds `lerobot[feetech]==0.6.1`. Add `--extra dev` only for test
+tools. The signaling-only machine needs the base bridge. SDK installation also
+brings its base dependencies, including PyTorch; bridge simulation does not.
+Do **not** install either SO extra over a prepared B601/Jetson SDK.
 
-If developing against a local LeRobot checkout instead of the pinned release:
+If deliberately developing against a local LeRobot checkout instead of the
+pinned release (not the reproducible install path):
 
 ```bash
 uv pip install -e .
@@ -217,8 +237,9 @@ LeRobot `OpenCVCamera`, never `robot.get_observation()` or the motor worker.
 It passes `index_or_path`, `width`, `height`, `fps`, and `fourcc` to
 `OpenCVCameraConfig`, uses RGB frames, and runs blocking `async_read()` off the
 event loop on its own worker. The imports/configuration match both v0.6.1 and the
-reviewed `ca69a2068462a37f7cdcb74180927a2f863d2bf7` snapshot; this is not an
-auto-discovered `lerobot-record` plugin or a dataset/policy integration.
+reviewed `ca69a2068462a37f7cdcb74180927a2f863d2bf7` snapshot. This section describes
+the standalone browser path, not SDK observations or recording. Use the separate
+[native camera guide](../examples/native/README.md#camera-observations) for those.
 
 References: official [LeRobot cameras](https://huggingface.co/docs/lerobot/en/cameras),
 [camera source (v0.6.1)](https://github.com/huggingface/lerobot/tree/v0.6.1/src/lerobot/cameras/opencv),
@@ -273,6 +294,10 @@ connection/rate limits. Authentication sends the token in an Authorization
 header, not in URLs; plain `ws://` still exposes it to the network.
 
 ### 3. Start the follower, then the leader
+
+These are **standalone** commands. To keep using LeRobot's native
+`lerobot-teleoperate`, follow the [three-terminal native recipe](../examples/native/README.md#three-terminal-so-101-teleoperation)
+instead, with `host` rather than `follower` and `--teleop.use_degrees=false`.
 
 On the follower computer:
 
@@ -334,10 +359,21 @@ does **not** include a TURN server.
 
 ## Safety behavior and limits
 
+These host-side hardware safeguards apply to both modes. Native SDK commands
+add an observation-bound action/result exchange; read its
+[cadence and STOP limits](../examples/native/README.md#cadence-stop-and-rollout-limits).
+Native SDK `get_observation()` binds the permit before computation, and each
+action consumes that permit without background replay or renewal. Startup has
+a 5-second first-command budget; active control defaults to 300 ms. SDK setup,
+recording saves, inference, and interactive pauses can STOP; restart/rearm both
+endpoints. Neither SDK records returned clamped targets as action labels.
+
 - SO uses `use_degrees=False` on both leader/follower drivers: five body joints are
   normalized to `[-100, 100]`, gripper to `[0, 100]`. Missing/extra joints,
   non-finite numbers, incompatible model/units, and malformed packets end the
-  session. Older/out-of-order or expired packets are ignored.
+  session. Standalone mode ignores older/out-of-order or expired command packets;
+  native mode ends the session on out-of-sequence submissions or expired/unknown
+  permits. The native SDK leader must explicitly set `--teleop.use_degrees=false`.
 - Default `--max-relative-target 5` clips each target to within **5 normalized
   units of the measured current joint position per write**, using LeRobot's
   limiter. It is **not** a degrees/second, force, acceleration, or collision
@@ -356,8 +392,10 @@ does **not** include a TURN server.
   A watchdog trip, transport/signaling loss, invalid message, or hardware error
   **ends the session**. It cannot automatically resume on a new packet.
 - With video enabled, frame failure/idle or browser transport loss ends current
-  control, without automatic reconnect/resume. Browser readiness and decoded
-  frames are software checks, not a safety-rated dead-man or proof of physical stop.
+  control in standalone mode; native mode has no browser but still fails on
+  video loss/idle. Neither automatically reconnects/resumes. Browser readiness
+  and decoded frames are software checks, not a safety-rated dead-man or proof
+  of physical stop.
 - On session exit/Ctrl+C the follower tries to read and command its current
   position, then disconnects. Default `--on-exit hold` leaves torque enabled
   to avoid dropping an unsupported arm. `--on-exit torque-off` disables torque
@@ -408,6 +446,8 @@ Do not recalibrate an already prepared arm merely to start this bridge.
 Do not mix the main SO `hardware` environment with `examples/b601-sdk`; these
 select different LeRobot versions. The [compatibility guide](compatibility.md) explains the separate
 locked dependency tracks and upstream's rolling-release security policy.
+The same warning applies to the SO `native` extra. Native `Robot` model support
+does not bypass any B601 gate; see [advanced native B601](../examples/native/README.md#b601-rs-advanced).
 
 On a shared prepared Jetson, reuse its reviewed driver without replacing or
 resyncing another project's SDK environment. Missing bridge dependencies belong
@@ -551,7 +591,12 @@ Source layout:
 | `src/lerobot_webrtc/video_viewer.py` | Authenticated loopback HTTP setup and native WebRTC browser video |
 | `src/lerobot_webrtc/signaling.py` | Authenticated WebSocket SDP relay |
 | `src/lerobot_webrtc/runtime.py` | Leader/follower loops and shutdown |
-| `src/lerobot_webrtc/cli.py` | Server, endpoint, and calibration commands |
+| `src/lerobot_webrtc/native_host.py` | Separate native Robot host, measured telemetry, correlated dispatched targets |
+| `src/lerobot_webrtc/native_client.py` | Synchronous observation-bound client with an owned network loop |
+| `src/lerobot_webrtc/native_options.py` | Shared native config; credential environment names, not secrets |
+| `src/lerobot_webrtc/video_receiver.py` | Headless decoded video for native RGB observations |
+| `src/lerobot_robot_webrtc/` | Optional LeRobot Robot config/adapter and virtual camera mapping |
+| `src/lerobot_webrtc/cli.py` | Server, native host, standalone endpoint, and calibration commands |
 
 Upstream references:
 [LeRobot API examples](https://huggingface.co/docs/lerobot/en/il_robots),

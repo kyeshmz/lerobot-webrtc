@@ -1,5 +1,6 @@
 .venv/
 .venv-b601/
+.venv-native/
 __pycache__/
 *.py[cod]
 .pytest_cache/

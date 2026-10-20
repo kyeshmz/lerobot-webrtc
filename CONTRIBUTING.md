@@ -49,8 +49,8 @@ uv run --no-sync pytest -q
 
 Add a regression test for behavior changes. Keep tests deterministic, finite and
 independent of physical devices, public services and secrets. The default pytest
-selection excludes `hardware_api` and `b601_api`; those markers test installed SDK
-interfaces, not physical arms.
+selection excludes `hardware_api`, `b601_api` and `native_api`; those markers test
+installed SDK interfaces and workflows, not physical arms.
 
 Video tests use synthetic frames, fake camera handles, and local WebRTC peers;
 they must never open a physical camera or microphone. Camera capture belongs to
@@ -77,6 +77,20 @@ Do not combine these SDK tracks in one environment or sync over a working Jetson
 installation. The B601 job runs its native fake-CAN checks and the compatible
 software suite. Read the [SDK environment guide](examples/b601-sdk/README.md) and
 [compatibility policy](docs/compatibility.md) before changing upstream pins.
+
+### Native SDK workflow checks
+
+For the native Robot plugin and actual LeRobot command workflows, use an isolated
+environment with the full script dependencies:
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-native uv sync --locked --extra dev --extra native
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --no-sync pytest -q -m native_api
+```
+
+These checks use simulated devices and test-owned datasets. They do not read
+physical teleoperators, listen for OS keyboard events, play audio, or upload to
+the Hub. Keep credentials in environment references, not SDK dataclass fields.
 
 ### Dependencies and packaging
 

@@ -32,7 +32,13 @@ def main():
     assert Path(sys.prefix).resolve() in location.parents, location
     assert lerobot_webrtc.__version__ == installed.version
     assert installed.metadata["Requires-Python"] == ">=3.12"
-    assert set(installed.metadata.get_all("Provides-Extra")) == {"hardware", "b601", "dev"}
+    assert set(installed.metadata.get_all("Provides-Extra")) == {
+        "hardware",
+        "native",
+        "b601",
+        "dev",
+    }
+    assert importlib.util.find_spec("lerobot_robot_webrtc") is not None
     assert not any("git+" in item for item in installed.requires)
     for optional in ("lerobot", "torch", "motorbridge", "numpy", "cv2", "PIL"):
         assert importlib.util.find_spec(optional) is None, f"Base install pulled in {optional}"
@@ -43,7 +49,15 @@ def main():
         [sys.executable, "-m", "lerobot_webrtc"],
         [str(Path(sys.executable).with_name("lerobot-webrtc"))],
     ):
-        for command in ([], ["serve"], ["leader"], ["follower"], ["bench"], ["calibrate"]):
+        for command in (
+            [],
+            ["serve"],
+            ["leader"],
+            ["follower"],
+            ["host"],
+            ["bench"],
+            ["calibrate"],
+        ):
             subprocess.run(
                 [*prefix, *command, "--help"],
                 check=True,

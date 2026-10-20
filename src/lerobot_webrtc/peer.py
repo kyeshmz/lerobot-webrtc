@@ -21,6 +21,7 @@ from aiortc import (
 from .video import prefer_video_codec, validate_video_sdp
 
 if TYPE_CHECKING:
+    from .video_receiver import VideoReceiver
     from .video_sources import LeRobotCameraTrack, SyntheticVideoTrack
     from .video_viewer import WebRTCViewer
 
@@ -49,14 +50,22 @@ class Peer:
         *,
         video_source: SyntheticVideoTrack | LeRobotCameraTrack | None = None,
         video_viewer: WebRTCViewer | None = None,
+        video_receiver: VideoReceiver | None = None,
+        channel_label: str = LABEL,
     ):
+        if video_viewer is not None and video_receiver is not None:
+            raise ValueError("Provide one video receiver, not both receiver and viewer")
+        if not isinstance(channel_label, str) or not 1 <= len(channel_label) <= 128:
+            raise ValueError("Invalid WebRTC data channel label")
+        video_receiver = video_receiver if video_receiver is not None else video_viewer
         if video_source is not None and role != "follower":
             raise ValueError("Only the follower can send camera video")
-        if video_viewer is not None and role != "leader":
+        if video_receiver is not None and role != "leader":
             raise ValueError("Only the leader can host the video viewer")
         self.role = role
         self.url = f"{signaling.rstrip('/')}/ws/{room}/{role}"
         self.token = token
+        self.channel_label = channel_label
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers or []))
         self.channel: RTCDataChannel | None = None
         self.opened = asyncio.Event()
@@ -69,10 +78,10 @@ class Peer:
         self._connect_started = False
         self._close_task: asyncio.Task | None = None
         self.video_source = video_source
-        self.video_viewer = video_viewer
+        self.video_receiver = video_receiver
         self._video_seen = False
 
-        media = video_source if video_source is not None else video_viewer
+        media = video_source if video_source is not None else video_receiver
         if media is not None:
             media.on_error = self.fail
             transceiver = self.pc.addTransceiver(
@@ -82,13 +91,13 @@ class Peer:
 
         @self.pc.on("track")
         def incoming_track(track):
-            if track.kind != "video" or self.video_viewer is None or self._video_seen:
+            if track.kind != "video" or self.video_receiver is None or self._video_seen:
                 track.stop()
                 self.fail(ValueError("Unexpected WebRTC media track"))
                 return
             self._video_seen = True
             try:
-                self.video_viewer.attach(track)
+                self.video_receiver.attach(track)
             except Exception as exc:
                 track.stop()
                 self.fail(exc)
@@ -100,7 +109,7 @@ class Peer:
                 self.fail(ConnectionError(f"WebRTC {self.pc.connectionState}"))
 
         if role == "leader":
-            self.attach(self.pc.createDataChannel(LABEL, ordered=False, maxRetransmits=0))
+            self.attach(self.pc.createDataChannel(channel_label, ordered=False, maxRetransmits=0))
         else:
 
             @self.pc.on("datachannel")
@@ -112,10 +121,15 @@ class Peer:
             self.error = error
             self.closed.set()
 
+    @property
+    def video_viewer(self):
+        """Compatibility alias; incoming media is owned by video_receiver."""
+        return self.video_receiver
+
     def attach(self, channel: RTCDataChannel) -> None:
         if (
             self.channel is not None
-            or channel.label != LABEL
+            or channel.label != self.channel_label
             or channel.ordered
             or channel.maxRetransmits != 0
             or channel.maxPacketLifeTime is not None
@@ -160,17 +174,13 @@ class Peer:
         self._connect_started = True
         try:
             async with asyncio.timeout(timeout):
-                if self.video_viewer is not None:
-                    await self.video_viewer.start()
-                    logger.info(
-                        "Video viewer: %s (user: viewer; password: LEROBOT_WEBRTC_TOKEN)",
-                        self.video_viewer.url,
-                    )
-                    await self._wait_until(self.video_viewer.browser_ready)
+                if self.video_receiver is not None:
+                    await self.video_receiver.start()
+                    await self._wait_until(self.video_receiver.signaling_ready)
                 self.signal_task = asyncio.create_task(self.signal(), name="signaling")
                 await self._wait_until(self.opened)
-                if self.video_viewer is not None:
-                    await self._wait_until(self.video_viewer.ready)
+                if self.video_receiver is not None:
+                    await self._wait_until(self.video_receiver.ready)
         except BaseException as primary:
             try:
                 await self.close()
@@ -240,7 +250,7 @@ class Peer:
                             self.answer_received = True
                             sdp = _signaled_sdp(data)
                             validate_video_sdp(
-                                sdp, "sendonly" if self.video_viewer is not None else None
+                                sdp, "sendonly" if self.video_receiver is not None else None
                             )
                             await self.pc.setRemoteDescription(RTCSessionDescription(sdp, kind))
                         else:
@@ -266,8 +276,8 @@ class Peer:
         operations = [self.pc.close]
         if self.video_source is not None:
             operations.append(self.video_source.aclose)
-        if self.video_viewer is not None:
-            operations.append(self.video_viewer.close)
+        if self.video_receiver is not None:
+            operations.append(self.video_receiver.close)
         for close in operations:
             try:
                 await close()
