@@ -1,0 +1,68 @@
+name: Packages
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Check project and example locks
+        run: |
+          uv lock --check
+          uv lock --check --project examples/b601-sdk
+          uv lock --check --script examples/livekit/probe.py
+      - name: Build sdist and wheel from the sdist
+        run: uv build --no-sources
+      - name: Validate distribution metadata
+        run: uvx --from twine==7.0.0 twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/*
+          if-no-files-found: error
+
+  install:
+    name: Install ${{ matrix.distribution }} / Python ${{ matrix.python }} / ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.12", "3.13"]
+        distribution: [whl, tar.gz]
+    env:
+      PYTHONPATH: ""
+      PYTHONNOUSERSITE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+      - name: Install the built artifact into a clean environment
+        run: |
+          uv venv --seed --python "${{ matrix.python }}" "$RUNNER_TEMP/package-venv"
+          "$RUNNER_TEMP/package-venv/bin/python" -m pip install dist/*.${{ matrix.distribution }}
+          "$RUNNER_TEMP/package-venv/bin/python" -m pip check
+      - name: Check imports, metadata, CLI, and real simulated WebRTC outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/package-venv/bin/python" "$GITHUB_WORKSPACE/.github/scripts/check_installed.py"
+          "$RUNNER_TEMP/package-venv/bin/python" "$GITHUB_WORKSPACE/examples/demo.py" --duration 3

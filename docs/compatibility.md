@@ -42,6 +42,14 @@ packages; the SDK example retains upstream's platform-specific source resolution
 Neither lock provisions GPU drivers. Prepared Jetson installations still need
 separately reviewed platform-specific wheel compatibility.
 
+The [Packages workflow](../.github/workflows/packages.yml) builds an sdist and a
+wheel from that sdist, checks their metadata with Twine, and tests both artifacts
+with pip in fresh Python 3.12/3.13 environments on Linux and macOS. Import, CLI and simulated
+WebRTC checks run outside the checkout, without the optional robot SDKs. It also
+checks the root, B601 and LiveKit script locks. This is validation only: it does
+not publish to PyPI, deploy providers or access motors. The separate Verify jobs
+exercise the installed SO/B601 SDK APIs with fake buses.
+
 On a prepared Jetson, do **not** sync a shared working SDK environment. A fresh
 Python dependency lock does not install matching JetPack/CUDA drivers or qualify
 a platform-specific PyTorch wheel. Follow LeRobot/platform installation guidance

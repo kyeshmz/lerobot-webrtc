@@ -7,6 +7,7 @@
 <div align="center">
 
 [![Verify](https://github.com/kyeshmz/lerobot-webrtc/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/kyeshmz/lerobot-webrtc/actions/workflows/verify.yml)
+[![Packages](https://github.com/kyeshmz/lerobot-webrtc/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/kyeshmz/lerobot-webrtc/actions/workflows/packages.yml)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://docs.python.org/3.12/)
 [![Ruff](https://img.shields.io/badge/Code%20style-Ruff-D7FF64?logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
 
@@ -35,7 +36,7 @@ force feedback, or automatic mapping between different arms.
 
 ## Quick Start
 
-Requires **Python 3.12+**; development and CI use Python 3.12. Install
+Requires **Python 3.12+**; SDK CI uses 3.12 and package CI tests 3.12/3.13. Install
 [uv](https://docs.astral.sh/uv/getting-started/installation/), then run a finite,
 hardware-free demo:
 
