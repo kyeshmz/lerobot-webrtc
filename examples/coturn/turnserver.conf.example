@@ -1,0 +1,20 @@
+# Development example for a dedicated Linux relay; replace placeholders before use.
+listening-port=3478
+realm=REPLACE_WITH_TURN_HOSTNAME
+fingerprint
+lt-cred-mech
+# Uncomment only after replacing both values. No account is enabled by this template.
+# user=REPLACE_WITH_USERNAME:REPLACE_WITH_LONG_RANDOM_PASSWORD
+min-port=49160
+max-port=49200
+user-quota=4
+total-quota=20
+cli=false
+no-multicast-peers
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=::1
+# This example does not provision a TLS certificate. Do not use turns: with it.
+no-tls
+dtls=false
+# If the server is behind 1:1 NAT, set the public/private mapping explicitly:
+# external-ip=REPLACE_WITH_PUBLIC_IP/REPLACE_WITH_PRIVATE_IP

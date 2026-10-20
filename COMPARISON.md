@@ -27,6 +27,8 @@ current implementation.
   `examples/demo.py` (simulated loopback, no hardware).
 - This is a standalone companion CLI, not a registered LeRobot Robot/Teleoperator
   plugin. Native LeRobot setup/calibration and runtime bridge commands remain separate.
+- Provider examples are in [examples/](examples/README.md): Cloudflare Tunnel/TURN
+  and coturn work with the P2P bridge; the LiveKit SDK example is transport-only.
 
 ## Comparison table
 

@@ -60,9 +60,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - run: uv sync --locked --extra dev --extra hardware --extra b601
-      - run: uv pip install 'lerobot[rebot] @ git+https://github.com/huggingface/lerobot.git@ca69a2068462a37f7cdcb74180927a2f863d2bf7'
-      - run: uv run --no-sync pytest -q -m b601_api --junitxml=test-results.xml
+      - run: uv sync --locked --project examples/b601-sdk
+      - run: uv run --project examples/b601-sdk --no-sync pytest -q -m 'not hardware_api' --junitxml=test-results.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

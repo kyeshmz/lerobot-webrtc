@@ -8,6 +8,11 @@ version = "0.1.0"
 description = "LeRobot SO-100/SO-101 and B601-RS joint-position transport over WebRTC"
 readme = "README.md"
 requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = ["aiortc>=1.15,<2", "aiohttp>=3.14.4,<4"]
 
 [project.optional-dependencies]

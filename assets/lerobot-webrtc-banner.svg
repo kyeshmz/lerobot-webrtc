@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title description">
+  <title id="title">LeRobot × WebRTC</title>
+  <desc id="description">An original yellow hugging-face illustration connects through a colorful WebRTC network to a robot arm. A standalone Python companion for Hugging Face LeRobot, not an official endorsement.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#101f35"/>
+      <stop offset="1" stop-color="#07121f"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#ffe986"/>
+      <stop offset="1" stop-color="#ffce45"/>
+    </linearGradient>
+    <linearGradient id="connection" gradientUnits="userSpaceOnUse" x1="900" y1="179" x2="1168" y2="179">
+      <stop stop-color="#ffda62"/>
+      <stop offset="0.5" stop-color="#7bdcff"/>
+      <stop offset="1" stop-color="#80e4bb"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#9bc5e5" stroke-opacity="0.045"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="360" rx="24" fill="url(#background)"/>
+  <rect width="1280" height="360" rx="24" fill="url(#grid)"/>
+  <path d="M0 323C285 282 440 387 719 330S1120 287 1280 325" fill="none" stroke="#69d4ff" stroke-opacity="0.12" stroke-width="2"/>
+  <circle cx="117" cy="172" r="91" fill="#ffd35c" fill-opacity="0.045"/>
+  <circle cx="117" cy="172" r="78" fill="#ffd35c" fill-opacity="0.055"/>
+  <circle cx="117" cy="161" r="65" fill="url(#face)"/>
+  <path d="M88 146q9-13 18 0M130 146q9-13 18 0" fill="none" stroke="#463415" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="83" cy="164" rx="11" ry="7" fill="#ffad82" fill-opacity="0.7"/>
+  <ellipse cx="151" cy="164" rx="11" ry="7" fill="#ffad82" fill-opacity="0.7"/>
+  <path d="M96 163q21 29 42 0" fill="#56351e"/>
+  <path d="M105 178q12-9 24 0" fill="#fa988e"/>
+  <path d="M54 201c-14-13-25-6-18 6l13 18c-18-10-27 0-14 11l22 17c12 9 28 5 41-4l21-14c9-6 4-19-6-14l-18 8-20-25c-7-9-17-6-13 3l10 17" fill="url(#face)" stroke="#d29a2b" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M180 201c14-13 25-6 18 6l-13 18c18-10 27 0 14 11l-22 17c-12 9-28 5-41-4l-21-14c-9-6-4-19 6-14l18 8 20-25c7-9 17-6 13 3l-10 17" fill="url(#face)" stroke="#d29a2b" stroke-width="2.5" stroke-linejoin="round"/>
+  <g text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="528" y="83" fill="#ffd763" font-size="13" font-weight="650" letter-spacing="2.2">A COMPANION FOR HUGGING FACE LEROBOT</text>
+    <text x="528" y="157" fill="#f5f9ff" font-size="58" font-weight="750" letter-spacing="-2">LeRobot <tspan fill="#66819a" font-weight="400">×</tspan> <tspan fill="#80dcff">WebRTC</tspan></text>
+    <text x="528" y="197" fill="#bdcddd" font-size="20">Robot control. Two computers. One encrypted link.</text>
+    <g font-size="13" font-weight="550" transform="translate(96 0)">
+      <rect id="python-pill" x="232" y="224" width="122" height="32" rx="16" fill="#183049" stroke="#30485e"/>
+      <circle cx="243" cy="240" r="3" fill="#7bdcff"/>
+      <text data-container="python-pill" x="293" y="240" dominant-baseline="middle" fill="#e1efff">Python 3.12+</text>
+      <rect id="so-pill" x="366" y="224" width="155" height="32" rx="16" fill="#183049" stroke="#30485e"/>
+      <text data-container="so-pill" x="443.5" y="240" dominant-baseline="middle" fill="#e1efff">SO-100 / SO-101</text>
+      <rect id="b601-pill" x="533" y="224" width="100" height="32" rx="16" fill="#183049" stroke="#30485e"/>
+      <text data-container="b601-pill" x="583" y="240" dominant-baseline="middle" fill="#e1efff">B601-RS</text>
+    </g>
+    <text x="528" y="296" fill="#819ab2" font-size="12" font-weight="600" letter-spacing="2">TELEOPERATOR → WEBRTC → ROBOT</text>
+    <rect x="846" y="45" width="386" height="263" rx="23" fill="#102237" stroke="#29435c"/>
+    <rect id="protocol-pill" x="1083" y="61" width="129" height="27" rx="13.5" fill="#15392f"/>
+    <circle cx="1098" cy="74.5" r="3.5" fill="#80e4bb"/>
+    <text data-container="protocol-pill" x="1147.5" y="74.5" dominant-baseline="middle" fill="#b5f2d8" font-size="11" font-weight="600" letter-spacing="1">P2P · DTLS</text>
+    <path d="M900 179H1168" stroke="url(#connection)" stroke-width="3" stroke-dasharray="5 8" fill="none"/>
+    <rect x="868" y="147" width="66" height="65" rx="16" fill="#1b3349" stroke="#3c5c74"/>
+    <rect x="883" y="161" width="36" height="24" rx="4" fill="none" stroke="#ffda62" stroke-width="2.5"/>
+    <path d="M901 185v10m-12 0h24" stroke="#ffda62" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M1014 141l-29 52h58z" fill="none" stroke="#b4d1e4" stroke-opacity="0.65" stroke-width="2"/>
+    <circle cx="1014" cy="140" r="16" fill="#ef6863"/>
+    <circle cx="985" cy="193" r="16" fill="#64b9ed"/>
+    <circle cx="1043" cy="193" r="16" fill="#6bcc9c"/>
+    <circle cx="1014" cy="175" r="10" fill="#f0f7ff"/>
+    <path d="M1014 150v15m-21 22 13-7m16 0 13 7" stroke="#f0f7ff" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="1090" y="118" width="115" height="119" rx="18" fill="#122e42" stroke="#34546b"/>
+    <path d="M1111 218h72m-55 0 12-34-18-24 36-21" stroke="#a4e8ff" stroke-width="8" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="1140" cy="184" r="9" fill="#102237" stroke="#80e4bb" stroke-width="4"/>
+    <circle cx="1122" cy="160" r="8" fill="#102237" stroke="#80e4bb" stroke-width="4"/>
+    <path d="m1158 139 13 2 8-11m-8 11 5 12" stroke="#ffda62" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <text x="1039" y="266" fill="#9db7cd" font-size="12">Authenticated signaling. Encrypted joint data.</text>
+    <text x="1039" y="286" fill="#69879f" font-size="11">No camera required. No motion backlog.</text>
+  </g>
+</svg>

@@ -1,0 +1,14 @@
+[project]
+name = "lerobot-webrtc-b601-example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "lerobot-webrtc[b601,dev]",
+    "lerobot[rebot] @ git+https://github.com/huggingface/lerobot.git@ca69a2068462a37f7cdcb74180927a2f863d2bf7",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+lerobot-webrtc = { path = "../..", editable = true }

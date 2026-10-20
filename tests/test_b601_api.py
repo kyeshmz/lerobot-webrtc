@@ -2,6 +2,7 @@
 
 import importlib
 import math
+from importlib.metadata import version
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +17,8 @@ pytestmark = pytest.mark.b601_api
 def installed_b601(monkeypatch, tmp_path):
     import motorbridge
 
+    assert version("lerobot") == "0.6.2"
+    assert version("motorbridge") == "0.5.6"
     driver = importlib.import_module("lerobot.robots.rebot_b601_follower.rebot_b601_follower")
     robot = importlib.import_module("lerobot.robots.robot")
     monkeypatch.setattr(robot, "HF_LEROBOT_CALIBRATION", tmp_path)

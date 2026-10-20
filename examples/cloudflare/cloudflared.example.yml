@@ -1,0 +1,8 @@
+# Copy outside the repository or to ignored cloudflared.local.yml; replace all placeholders.
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /absolute/path/to/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  - hostname: signal.example.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404

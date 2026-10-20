@@ -1,6 +1,16 @@
-# LeRobot WebRTC
+<h1 align="center">LeRobot WebRTC</h1>
+
+<p align="center">
+  <img src="assets/lerobot-webrtc-banner.svg" alt="LeRobot × WebRTC — a Python companion for Hugging Face LeRobot" width="1280">
+</p>
+
+<div align="center">
 
 [![Verify](https://github.com/kyeshmz/lerobot-webrtc/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/kyeshmz/lerobot-webrtc/actions/workflows/verify.yml)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://docs.python.org/3.12/)
+[![Ruff](https://img.shields.io/badge/Code%20style-Ruff-D7FF64?logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
+
+</div>
 
 **LeRobot WebRTC** transports joint-position actions between two computers using
 LeRobot's hardware interfaces and an encrypted WebRTC data channel.
@@ -14,6 +24,15 @@ not an official LeRobot component or an auto-discovered Robot/Teleoperator plugi
 It does not provide camera streaming, dataset recording, policies, a browser UI,
 force feedback, or automatic mapping between different arms.
 
+## Highlights
+
+- **Two computers, real LeRobot drivers:** matching SO leader/follower pairs and
+  an opt-in B601-RS follower.
+- **Small transport:** encrypted P2P WebRTC, optional TURN, and signaling that
+  never carries joint commands.
+- **Try before connecting hardware:** a finite demo, provider examples, real
+  WebRTC tests, and fake-bus SDK checks.
+
 ## Quick Start
 
 Requires **Python 3.12+**; development and CI use Python 3.12. Install
@@ -23,7 +42,7 @@ hardware-free demo:
 ```bash
 git clone https://github.com/kyeshmz/lerobot-webrtc.git
 cd lerobot-webrtc
-uv sync --locked --extra dev
+uv sync --locked
 uv run --no-sync python examples/demo.py --duration 5
 ```
 
@@ -39,29 +58,18 @@ subprocess demo currently requires POSIX signal handling.
 
 ## Robots & Control
 
-The SO bridge follows LeRobot's familiar control interface:
+The SO bridge transports `teleop_device.get_action()` to `robot.send_action()`.
+It owns connection, serialized hardware I/O, command freshness, and shutdown.
 
-```python
-action = teleop_device.get_action()  # On the leader computer
-# WebRTC transport and follower-side validation
-robot.send_action(action)  # On the follower computer
-```
+| Bridge model | LeRobot device types | Joint positions |
+| --- | --- | --- |
+| `so100` | `so100_leader` → `so100_follower` | Six normalized values |
+| `so101` | `so101_leader` → `so101_follower` | Six normalized values |
+| `b601-rs` | `rebot_b601_follower`, RS motor family | Seven angles in degrees |
 
-The bridge owns connection, serialized hardware I/O, command freshness, and
-shutdown. Do not run this snippet as a second controller alongside an active
-bridge session.
-
-| Bridge `--robot` | LeRobot device types | Position units | Driver dependency |
-| --- | --- | --- | --- |
-| `so100` | `so100_leader` → `so100_follower` | Five body joints `[-100, 100]`; gripper `[0, 100]` | `lerobot[feetech]==0.6.1` |
-| `so101` | `so101_leader` → `so101_follower` | Five body joints `[-100, 100]`; gripper `[0, 100]` | `lerobot[feetech]==0.6.1` |
-| `b601-rs` | `rebot_b601_follower`, `motor_family="rs"`, `can_adapter="socketcan"` | Seven joint angles in degrees, including `wrist_yaw` and the gripper | Pinned LeRobot source below; MotorBridge 0.5.6 |
-
-For SO, both drivers explicitly use `use_degrees=False`; the gripper remains a
-0–100 opening value. B601 uses its native degree convention, including negative
-gripper angles. These schemas cannot be mixed. This bridge supports only the
-RobStride B601 variant on **Linux SocketCAN**, not every platform or motor family
-supported by upstream LeRobot.
+SO explicitly uses `use_degrees=False`: body joints `[-100, 100]`, gripper `[0, 100]`.
+B601 includes wrist yaw and an angular gripper, and is limited here to RobStride
+on **Linux SocketCAN**. These schemas cannot be mixed.
 
 LeRobot's `--robot.type` / `--teleop.type` flags and this bridge's `--robot` flag
 are separate CLI namespaces. The names above show their correspondence; the
@@ -75,12 +83,9 @@ For physical SO arms, install the hardware extra on both arm computers:
 uv sync --locked --extra dev --extra hardware
 ```
 
-Follow LeRobot's [SO-101](https://huggingface.co/docs/lerobot/en/so101) or
-[SO-100](https://huggingface.co/docs/lerobot/en/so100) guide for assembly, port
-discovery, motor setup, and local calibration before starting network control.
-LeRobot supplies `lerobot-find-port`, `lerobot-setup-motors`, and
-`lerobot-calibrate`. The bridge also provides an SO calibration wrapper; reuse
-the same arm IDs and calibration cache. See [physical SO setup](docs/usage.md#set-up-physical-so-arms).
+This selects released `lerobot[feetech]==0.6.1`. Complete LeRobot's local
+[SO setup/calibration workflow](docs/usage.md#set-up-physical-so-arms) before
+network control; reuse the same device IDs and calibration cache.
 
 For B601-RS, use a **separate prepared environment**. The reviewed driver is
 LeRobot commit `ca69a2068462a37f7cdcb74180927a2f863d2bf7`, which reports version
@@ -88,27 +93,24 @@ LeRobot commit `ca69a2068462a37f7cdcb74180927a2f863d2bf7`, which reports version
 extra as a B601 driver:
 
 ```bash
-uv venv --python 3.12 .venv-b601
-uv pip install --python .venv-b601/bin/python -e '.[b601,dev]' \
-  'lerobot[rebot] @ git+https://github.com/huggingface/lerobot.git@ca69a2068462a37f7cdcb74180927a2f863d2bf7'
+uv sync --locked --project examples/b601-sdk
 ```
 
-The upstream [reBot B601 guide](https://github.com/huggingface/lerobot/blob/ca69a2068462a37f7cdcb74180927a2f863d2bf7/docs/source/rebot_b601.mdx)
-covers first-time setup and calibration. B601 calibration changes motor zeros;
-this bridge assumes an already commissioned arm and **never calibrates or zeros
-it at runtime**. Do not overwrite another project's working Jetson SDK or change
-CAN configuration to start a test. See the [B601-RS operating guide](docs/usage.md#b601-rs-opt-in-supervised-bench).
+The bridge assumes an already commissioned B601 and **never calibrates or zeros
+it at runtime**. Do not resync a shared Jetson SDK or reconfigure CAN to start a
+test. Follow the [B601-RS operating guide](docs/usage.md#b601-rs-opt-in-supervised-bench).
+
+The released SO extra and source-pinned B601 SDK use separate manifests, environments,
+and lockfiles. LeRobot's upstream security policy treats it as a
+rolling release, not an assurance that arbitrary `0.x` versions are interchangeable.
+See [package compatibility and versioning](docs/compatibility.md) for pins,
+SemVer/PEP 440 conventions, upgrade checks and security-support limitations.
 
 ### Network control
 
 ```text
-Teleoperator computer                       Robot computer
-leader.get_action()                         follower.send_action()
-        └──── encrypted WebRTC data channel ────────┘
-                   direct or through TURN
-
-Both endpoints ── authenticated WebSocket ── signaling server
-                       SDP/ICE only
+Teleoperator ── encrypted WebRTC, direct or TURN ── Robot
+      └──────── authenticated SDP signaling ─────────┘
 ```
 
 Set the same `LEROBOT_WEBRTC_TOKEN` on the signaling server and both endpoints.
@@ -116,14 +118,28 @@ The signaling server does not carry joint commands. Use a trusted private
 network or WSS; public internet connections may also need an authenticated TURN
 server.
 
-- [Three-terminal simulation](docs/usage.md#try-without-hardware)
-- [SO leader/follower launch](docs/usage.md#3-start-the-follower-then-the-leader)
-- [B601-RS move-and-hold](docs/usage.md#b601-rs-opt-in-supervised-bench)
-- [STUN/TURN configuration](docs/usage.md#across-nat--over-the-internet)
+Launch recipes: [manual simulation](docs/usage.md#try-without-hardware),
+[physical SO](docs/usage.md#3-start-the-follower-then-the-leader),
+[B601-RS](docs/usage.md#b601-rs-opt-in-supervised-bench), and
+[STUN/TURN](docs/usage.md#across-nat--over-the-internet).
 
 Real followers require explicit `--arm` consent; a physical B601 bench also
 requires `--execute`. The default bench moves relative to its measured current
 pose and holds. Home/return-to-start is optional via `--require-return`.
+
+### Cloudflare, TURN and other WebRTC services
+
+Start with the [examples index](examples/README.md):
+
+| Example | Use it for |
+| --- | --- |
+| [Local P2P](examples/local/README.md) | A finite demo, no account or hardware |
+| [Cloudflare Tunnel + TURN](examples/cloudflare/README.md) | WSS signaling and short-lived relay credentials |
+| [coturn](examples/coturn/README.md) | An authenticated relay you host |
+| [LiveKit](examples/livekit/README.md) | An optional, transport-only SDK probe—not robot control |
+
+Tunnel is not TURN, and TURN is not an SFU. A LiveKit room URL or Cloudflare
+Realtime SFU endpoint is not interchangeable with this bridge's signaling URL.
 
 ## Safety and Scope
 
@@ -133,11 +149,9 @@ pose and holds. Home/return-to-start is optional via `--require-return`.
 - Model/unit validation, follower-issued expiring permits, a latest-only mailbox,
   relative-target limits, and a local watchdog reject unsafe or stale software
   inputs. They are **not safety-rated collision, force, or real-time guarantees**.
-- B601 adds CAN ownership checks, native command bounds, target-rate admission,
-  and per-joint deadline checks. Its 0.35° feedback margin does not widen commanded
-  limits. It reuses LeRobot's joint/gripper dispatcher with one fresh acquisition
-  per command; its guarded startup differs deliberately from upstream's generic
-  `connect()` lifecycle.
+- B601 adds CAN ownership, target-rate and per-joint deadline checks. Its 0.35°
+  feedback margin does not widen commanded limits. Its guarded lifecycle differs
+  deliberately from upstream's generic `connect()`.
 - On exit, `hold` attempts a measured hold without explicitly disabling torque;
   it does not maintain feedback after transport closure. `torque-off` can let an
   unsupported arm fall. Neither policy verifies electrical torque state or
@@ -171,6 +185,7 @@ test, not accurate homing, full seven-axis qualification, or guaranteed standsti
 - [Operating guide](docs/usage.md): installation details, calibration wrapper,
   signaling, STUN/TURN, safety, and manual acceptance checks.
 - [Comparison with other WebRTC integrations](COMPARISON.md).
+- [Networking examples](examples/README.md) and [package/version policy](docs/compatibility.md).
 - [LeRobot README](https://github.com/huggingface/lerobot#readme),
   [installation](https://huggingface.co/docs/lerobot/installation), and
   [hardware integration](https://huggingface.co/docs/lerobot/integrate_hardware).
@@ -178,8 +193,11 @@ test, not accurate homing, full seven-axis qualification, or guaranteed standsti
   and [B601 driver source, pinned revision](https://github.com/huggingface/lerobot/tree/ca69a2068462a37f7cdcb74180927a2f863d2bf7/src/lerobot/robots/rebot_b601_follower).
 - [aiortc](https://aiortc.readthedocs.io/), [aiohttp](https://docs.aiohttp.org/),
   and [MotorBridge](https://github.com/motorbridge/motorbridge).
+- [Cloudflare Realtime](https://developers.cloudflare.com/realtime/) and
+  [LiveKit Python SDK](https://docs.livekit.io/reference/python/livekit/rtc/).
 
-Contributions are welcome. Run the relevant software checks and keep physical
-test results separate from simulation. Please acknowledge upstream LeRobot when
+Maintained by [@kyeshmz](https://github.com/kyeshmz). [Issues and feedback](https://github.com/kyeshmz/lerobot-webrtc/issues)
+and contributions are welcome. Run the relevant checks and label physical results
+separately from simulation. Please acknowledge upstream LeRobot when
 using its work; its [citation section](https://github.com/huggingface/lerobot#citation)
 provides the recommended references.

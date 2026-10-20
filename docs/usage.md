@@ -308,9 +308,7 @@ release), plus MotorBridge 0.5.6. The SO `.[hardware]` extra does not install th
 driver. For a new, isolated B601 environment:
 
 ```bash
-uv venv --python 3.12 .venv-b601
-uv pip install --python .venv-b601/bin/python -e '.[b601,dev]' \
-  'lerobot[rebot] @ git+https://github.com/huggingface/lerobot.git@ca69a2068462a37f7cdcb74180927a2f863d2bf7'
+uv sync --locked --project examples/b601-sdk
 ```
 
 LeRobot's [B601 setup and calibration guide](https://github.com/huggingface/lerobot/blob/ca69a2068462a37f7cdcb74180927a2f863d2bf7/docs/source/rebot_b601.mdx)
@@ -318,6 +316,10 @@ describes first-time commissioning. Its calibration operation changes motor zero
 This bridge assumes the arm is already commissioned with the intended zeros and
 directions; it never performs that operation during connection or teleoperation.
 Do not recalibrate an already prepared arm merely to start this bridge.
+
+Do not mix the main SO `hardware` environment with `examples/b601-sdk`; these
+select different LeRobot versions. The [compatibility guide](compatibility.md) explains the separate
+locked dependency tracks and upstream's rolling-release security policy.
 
 On a shared prepared Jetson, reuse its reviewed driver without replacing or
 resyncing another project's SDK environment. Missing bridge dependencies belong
@@ -329,7 +331,7 @@ power cutoff, start signaling as above. On the follower host, using its prepared
 Python environment and an **agreed existing controller lock path**:
 
 ```bash
-.venv-b601/bin/python -m lerobot_webrtc follower --robot b601-rs --port can1 --id webrtc_b601 \
+uv run --project examples/b601-sdk --no-sync lerobot-webrtc follower --robot b601-rs --port can1 --id webrtc_b601 \
   --room b601-bench --max-relative-target 0.5 --max-speed 2 --duration 20 \
   --can-lock /absolute/path/to/shared/can-can1.lock --arm
 ```
@@ -405,7 +407,7 @@ not require PyTorch. To run only the installed-driver checks, use
 These checks fail, rather than skip, if LeRobot is missing or incompatible.
 They use temporary calibration files and forbid opening serial ports.
 In the isolated B601 environment above, run
-`.venv-b601/bin/python -m pytest -q -m b601_api` to exercise the installed B601
+`uv run --project examples/b601-sdk --no-sync pytest -q -m b601_api` to exercise the installed B601
 driver with a fake MotorBridge. These tests forbid real controller construction,
 motor zeroing and fault clearing. Neither driver suite opens physical hardware.
 

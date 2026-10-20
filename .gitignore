@@ -8,4 +8,6 @@ __pycache__/
 dist/
 build/
 .env
+examples/cloudflare/cloudflared.local.yml
+examples/coturn/turnserver.local.conf
 .plans/
