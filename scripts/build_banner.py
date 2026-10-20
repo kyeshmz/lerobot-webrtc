@@ -17,8 +17,8 @@ BACKGROUND = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360
     viewBox="0 0 1280 360" role="img" aria-labelledby="title description">
   <title id="title">LeRobot × WebRTC</title>
   <desc id="description">The official Hugging Face logo, a centered LeRobot WebRTC title,
-  and a diagram of authenticated signaling and encrypted joint data between a leader
-  and follower, directly or through optional TURN. An independent companion for
+  and a diagram of authenticated signaling, encrypted joint data, and optional
+  follower camera video, directly or through optional TURN. An independent companion for
   Hugging Face LeRobot, not an official endorsement.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">

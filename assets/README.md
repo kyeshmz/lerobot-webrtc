@@ -7,7 +7,7 @@ from three separately editable parts:
 | --- | --- | --- |
 | Official logo | [`banner/huggingface-logo.svg`](banner/huggingface-logo.svg) | Exact SVG download linked from [Hugging Face's brand page](https://huggingface.co/brand), not a redraw or website-header variant |
 | Title and badges | [`banner/title-panel.svg`](banner/title-panel.svg) | Centered project title, subtitle, Python and robot labels |
-| Connection diagram | [`banner/network-diagram.svg`](banner/network-diagram.svg) | Separate authenticated signaling and encrypted WebRTC data paths, with optional TURN |
+| Connection diagram | [`banner/network-diagram.svg`](banner/network-diagram.svg) | Separate authenticated signaling and encrypted WebRTC control/video paths, with optional TURN; cameras off by default |
 
 The logo's [source record](banner/huggingface-logo.source.json) pins its official
 download URL, revision and SHA-256. Keep that source SVG unchanged. The assembler

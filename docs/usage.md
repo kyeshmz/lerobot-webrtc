@@ -30,22 +30,24 @@ Both computers ── authenticated WebSocket ── Signaling server
 - Follower-issued expiring permits, sequence checks, joint/value validation,
   local watchdog, and LeRobot's relative-target limiter.
 - Dedicated, serialized hardware I/O worker and best-effort hold on exit.
+- Optional single follower video track and receive-only loopback browser viewer;
+  cameras are off by default, with no audio or recording.
 - Simulation and tests that establish actual local WebRTC connections.
 - A separate B601-RS schema, guarded LeRobot startup and shutdown, shared CAN
   ownership check, and a small network-only bench source.
 
 **Scope:** SO transports six normalized positions; B601-RS transports seven joint
-angles in degrees, including `wrist_yaw` and the angular gripper. It does not stream a camera,
-record datasets, run policies, provide force feedback, or provide a browser UI.
-Both endpoints are Python programs. Other LeRobot arms need an adapter and a
-matching protocol joint schema.
+angles in degrees, including `wrist_yaw` and the angular gripper. Both control
+endpoints remain Python programs; the optional browser only receives video. It
+does not record datasets, run policies, provide force feedback, or accept browser
+arm commands. Other LeRobot arms need an adapter and a matching protocol joint schema.
 
 ## How this differs from other LeRobot + WebRTC options
 
 |  | This repo | `lerobot` PR #3962 | `koenvanwijk/lerobot-*` | `videosdk-teleop` |
 | --- | --- | --- | --- | --- |
 | Direction | Leader arm → follower arm | Cloud app → remote robot | Any teleop → any robot | Any teleop/robot + recording |
-| Media | Joints only, no camera | Joints + camera | Negotiated action dicts | Frames + joints, correlated IDs |
+| Media | Joints; optional single camera and local receive-only browser viewer | Joints + camera | Negotiated action dicts | Frames + joints, correlated IDs |
 | Network | `aiortc` P2P, self-hosted signaling | `aiortc` or LiveKit SFU | WebRTC + matchmaker (self/hosted) | Hosted VideoSDK SFU |
 | Recording | None | Via `Robot` API | None advertised | LeRobot dataset export |
 
@@ -140,6 +142,88 @@ leader moves `shoulder_pan` with a sine wave and sets the gripper to 25%.
 Press **Ctrl+C** to stop. Stopping either endpoint terminates the other session;
 restart **both** endpoints to reconnect. `--duration 10` optionally stops an
 endpoint after ten seconds of connected control.
+
+## Optional video
+
+Video is **off by default**. Start with the finite, fully hardware-free
+[three-terminal synthetic example](../examples/video/README.md). It uses base
+PyAV dependencies, not a camera, LeRobot, NumPy, or PIL.
+
+```text
+Follower camera/test pattern ── WebRTC video ── Python leader ── WebRTC video ── Local browser
+Follower arm                ◀── WebRTC data ─── Python leader ◀── Physical teleoperator
+```
+
+The robot link uses one follower → leader video track on the existing peer
+connection, directly or through TURN. The Python leader decodes it and sends it
+over a **second native WebRTC connection** to an HTML `<video>` MediaStream.
+This is not MJPEG, HTTP frame polling, snapshots, or recording. The browser is
+receive-only: no arm commands, microphone/audio, or browser camera capture.
+The Python leader still owns the LeRobot physical teleoperator.
+
+### Video settings
+
+| Command | Option | Meaning / default |
+| --- | --- | --- |
+| Follower | `--test-video` **or** `--camera-index INTEGER` | Mutually exclusive opt-in sources: synthetic pattern or explicit nonnegative real camera index |
+| Follower | `--video-width INTEGER` | Even integer 16–1280; default `640` |
+| Follower | `--video-height INTEGER` | Even integer 16–720; default `480` |
+| Follower | `--video-fps INTEGER` | Integer 1–30; default `15`; separate from joint-control `--fps` |
+| Follower | `--camera-fourcc FOURCC` | Camera capture format, e.g. `MJPG` or `YUYV`; exactly four uppercase letters/digits; only with `--camera-index`; unset by default |
+| Leader | `--view-video [PORT]` | Opt in to the local viewer; omitted port means `8081`; binds only `127.0.0.1` |
+| Both | `--video-codec auto\|vp8\|h264` | Network codec; default `auto` negotiates a common codec; explicit VP8/H.264 requires a common supported codec |
+
+Both sides must opt in; unexpected/incompatible video SDP fails before camera
+capture or motor connection. Video settings without an opt-in source/viewer are
+rejected. Unsupported codec values, including `av1`, are rejected; an explicit
+codec does not silently fall back. Camera FOURCC is **not** the network codec:
+`MJPG` capture can still be encoded as VP8 or H.264 over WebRTC. Requested camera
+resolution, FPS, and an explicit FOURCC are checked against the selected mode;
+an unsupported mode fails rather than silently selecting another one. This does
+not guarantee delivered frame rate or hardware-accelerated encoding.
+
+### Viewer startup and stopping
+
+On the leader computer, open `http://127.0.0.1:8081` (or your chosen port).
+Authenticate with HTTP Basic username **`viewer`** and password equal to the
+shared **`LEROBOT_WEBRTC_TOKEN`**. The page and SDP exchange are loopback HTTP;
+the token is not embedded in the URL/page or logged. Do not expose or proxy the
+viewer to other machines; it is not a remote browser-control service.
+
+Click **Connect** before the Python leader joins robot signaling. Once the local
+browser WebRTC connection is ready, robot negotiation proceeds; the Python leader
+waits for its first decoded follower frame before connecting the leader arm.
+This does not prove the browser has displayed a fresh image or that the scene is safe.
+Frame failure/idle, browser transport loss, or either endpoint exiting ends current
+control. There is **no automatic reconnect or resume**; restart both endpoints and
+connect a fresh viewer session. A finite session ending also closes the peer;
+stop the separate signaling process with Ctrl+C when finished.
+
+The browser is **not a safety-rated dead-man or guaranteed physical stop**.
+Both WebRTC hops share CPU/network resources with control, without real-time
+video or control guarantees. Keep the control terminal accessible and use the
+independent physical cutoff and [hardware safeguards](#safety-behavior-and-limits).
+
+### Real camera opt-in
+
+**`--simulate` simulates arms only.** Adding `--camera-index 0` explicitly opens a
+**real camera**, even in arm simulation. Use `--simulate --test-video` for a fully
+hardware-free session. `bench` and `calibrate` have no video flags and remain data-only.
+
+For a physical source, use the released SO `hardware` extra or the separately
+prepared [B601 SDK environment](../examples/b601-sdk/README.md). Do not sync or
+replace a shared Jetson SDK to add video. Camera capture uses an independent
+LeRobot `OpenCVCamera`, never `robot.get_observation()` or the motor worker.
+It passes `index_or_path`, `width`, `height`, `fps`, and `fourcc` to
+`OpenCVCameraConfig`, uses RGB frames, and runs blocking `async_read()` off the
+event loop on its own worker. The imports/configuration match both v0.6.1 and the
+reviewed `ca69a2068462a37f7cdcb74180927a2f863d2bf7` snapshot; this is not an
+auto-discovered `lerobot-record` plugin or a dataset/policy integration.
+
+References: official [LeRobot cameras](https://huggingface.co/docs/lerobot/en/cameras),
+[camera source (v0.6.1)](https://github.com/huggingface/lerobot/tree/v0.6.1/src/lerobot/cameras/opencv),
+[teleoperator source (v0.6.1)](https://github.com/huggingface/lerobot/tree/v0.6.1/src/lerobot/teleoperators/so_leader),
+and [aiortc API](https://aiortc.readthedocs.io/en/latest/api.html).
 
 ## Set up physical SO arms
 
@@ -243,8 +327,9 @@ port 5349; other forms default to 3478. Credentials are read only from
 
 STUN alone cannot traverse every NAT/firewall. Supply your own authenticated
 TURN server for restrictive networks. TURN relays encrypted WebRTC traffic;
-the signaling server still does not carry motor commands. Allow peer UDP
-traffic/TURN ports through the applicable firewalls. The signaling server
+this includes joint data and optional video on the robot peer connection, not
+the separate local browser hop. The signaling server carries neither commands
+nor video. Allow peer UDP traffic/TURN ports through the applicable firewalls. The signaling server
 does **not** include a TURN server.
 
 ## Safety behavior and limits
@@ -270,6 +355,9 @@ does **not** include a TURN server.
   trips the watchdog. The first command has a 5-second startup grace period.
   A watchdog trip, transport/signaling loss, invalid message, or hardware error
   **ends the session**. It cannot automatically resume on a new packet.
+- With video enabled, frame failure/idle or browser transport loss ends current
+  control, without automatic reconnect/resume. Browser readiness and decoded
+  frames are software checks, not a safety-rated dead-man or proof of physical stop.
 - On session exit/Ctrl+C the follower tries to read and command its current
   position, then disconnects. Default `--on-exit hold` leaves torque enabled
   to avoid dropping an unsupported arm. `--on-exit torque-off` disables torque
@@ -457,7 +545,10 @@ Source layout:
 | `src/lerobot_webrtc/b601.py` | Guarded B601-RS driver lifecycle and exclusive CAN lease |
 | `src/lerobot_webrtc/bench.py` | Bounded network-only source with encoder-observed verdict |
 | `src/lerobot_webrtc/protocol.py` | Joint schema, expiring permits, latest-only mailbox |
-| `src/lerobot_webrtc/peer.py` | aiortc connection and WebRTC data channel |
+| `src/lerobot_webrtc/peer.py` | aiortc connection, control data channel, optional video negotiation |
+| `src/lerobot_webrtc/video.py` | Video settings and SDP/codec policy |
+| `src/lerobot_webrtc/video_sources.py` | Synthetic frames and independent LeRobot camera capture |
+| `src/lerobot_webrtc/video_viewer.py` | Authenticated loopback HTTP setup and native WebRTC browser video |
 | `src/lerobot_webrtc/signaling.py` | Authenticated WebSocket SDP relay |
 | `src/lerobot_webrtc/runtime.py` | Leader/follower loops and shutdown |
 | `src/lerobot_webrtc/cli.py` | Server, endpoint, and calibration commands |

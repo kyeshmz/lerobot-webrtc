@@ -52,6 +52,11 @@ independent of physical devices, public services and secrets. The default pytest
 selection excludes `hardware_api` and `b601_api`; those markers test installed SDK
 interfaces, not physical arms.
 
+Video tests use synthetic frames, fake camera handles, and local WebRTC peers;
+they must never open a physical camera or microphone. Camera capture belongs to
+its own worker, not the motor executor. Keep browser signaling authenticated and
+loopback-only, and preserve arm-first cleanup when media fails.
+
 ### SDK-specific changes
 
 For SO-100/SO-101 changes, install the released SDK track and run its fake-bus tests:

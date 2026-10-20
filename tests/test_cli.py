@@ -192,3 +192,40 @@ def test_calibrate_preserves_calibration_and_cleanup_errors(monkeypatch):
         "calibration failed",
         "disconnect failed",
     ]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["leader", "--simulate", "--video-codec", "h264"], "Video settings require"),
+        (["follower", "--simulate", "--video-width", "320"], "Video settings require"),
+        (["follower", "--simulate", "--camera-index", "-1"], "nonnegative"),
+        (
+            ["follower", "--simulate", "--test-video", "--camera-fourcc", "MJPG"],
+            "requires --camera-index",
+        ),
+        (["follower", "--simulate", "--test-video", "--video-fps", "60"], "Video fps"),
+        (["follower", "--simulate", "--test-video", "--video-width", "641"], "Video width"),
+        (["leader", "--simulate", "--view-video", "0"], "port between"),
+    ],
+)
+def test_invalid_video_settings_fail_before_endpoint_access(
+    monkeypatch, capsys, arguments, message
+):
+    monkeypatch.setenv("LEROBOT_WEBRTC_TOKEN", "test-secret-at-least-16-characters")
+    monkeypatch.setattr("sys.argv", ["lerobot-webrtc", *arguments])
+    with pytest.raises(SystemExit) as status:
+        main()
+    assert status.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_video_capture_is_explicit_and_follower_only():
+    from lerobot_webrtc.cli import parser
+
+    args = parser().parse_args(["follower", "--simulate"])
+    assert args.camera_index is None and not args.test_video
+    with pytest.raises(SystemExit):
+        parser().parse_args(["leader", "--simulate", "--camera-index", "0"])
+    with pytest.raises(SystemExit):
+        parser().parse_args(["bench", "--simulate", "--view-video"])

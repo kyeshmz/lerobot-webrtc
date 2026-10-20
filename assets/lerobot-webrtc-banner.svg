@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title description">
   <title id="title">LeRobot × WebRTC</title>
   <desc id="description">The official Hugging Face logo, a centered LeRobot WebRTC title,
-  and a diagram of authenticated signaling and encrypted joint data between a leader
-  and follower, directly or through optional TURN. An independent companion for
+  and a diagram of authenticated signaling, encrypted joint data, and optional
+  follower camera video, directly or through optional TURN. An independent companion for
   Hugging Face LeRobot, not an official endorsement.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
@@ -47,8 +47,8 @@
     </g>
   </svg>
   <svg width="386" height="263" viewBox="0 0 386 263" role="img" aria-labelledby="diagram-title diagram-description" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" id="network-diagram" x="846" y="45">
-    <title id="diagram-title">LeRobot WebRTC joint-data connection</title>
-    <desc id="diagram-description">A leader and follower use matching joint schemas. Each endpoint exchanges authenticated SDP with the signaling server over separate dashed links; the signaling server does not carry joint data. The endpoints exchange encrypted joint data over WebRTC, directly peer to peer or through an optional TURN data relay. Joint data only, no video. This is a network diagram, not a hardware action.</desc>
+    <title id="diagram-title">LeRobot WebRTC joint-data and optional video connection</title>
+    <desc id="diagram-description">A leader and follower use matching joint schemas. Each endpoint exchanges authenticated SDP with the signaling server over separate dashed links; the signaling server carries neither joint data nor video. The endpoints exchange encrypted joint data and optional follower-to-leader video over WebRTC, directly peer to peer or through an optional TURN relay for both. Cameras are off by default. This is a network diagram, not a hardware action.</desc>
     <defs>
       <linearGradient id="diagram-data-link" gradientUnits="userSpaceOnUse" x1="114" y1="149" x2="272" y2="149">
         <stop stop-color="#ffda62" />
@@ -74,7 +74,7 @@
         <rect x="187" y="147" width="12" height="10" rx="2" />
         <path d="M193 151V153" />
       </g>
-      <text x="193" y="171" fill="#e1efff" font-size="10.2" font-weight="550">encrypted joint data</text>
+      <text x="193" y="171" fill="#e1efff" font-size="10.2" font-weight="550">joint data + optional video</text>
       <text x="193" y="186" fill="#9db7cd" font-size="9.5">direct P2P</text>
       <g fill="none" stroke="#80dcff" stroke-width="1.5" stroke-dasharray="3 5" stroke-linecap="round" stroke-opacity="0.8">
         <path d="M67 189V210Q67 220 77 220H136" />
@@ -82,7 +82,7 @@
       </g>
       <rect id="diagram-turn-card" x="136" y="204" width="114" height="32" rx="9" fill="#143044" stroke="#3f6c83" />
       <text data-card="diagram-turn-card" x="193" y="214" fill="#80dcff" font-size="10.5" font-weight="700" letter-spacing="0.8">TURN</text>
-      <text data-card="diagram-turn-card" x="193" y="228" fill="#bdcddd" font-size="9.2">optional data relay</text>
+      <text data-card="diagram-turn-card" x="193" y="228" fill="#bdcddd" font-size="9.2">optional data + video</text>
       <rect id="diagram-leader-card" x="20" y="105" width="94" height="84" rx="13" fill="#1b3349" stroke="#675d3d" />
       <text data-card="diagram-leader-card" x="67" y="119" fill="#ffda62" font-size="11" font-weight="700" letter-spacing="0.7">LEADER</text>
       <g fill="none" stroke="#ffda62" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -107,7 +107,7 @@
         </g>
       </g>
       <text data-card="diagram-follower-card" x="319" y="177" fill="#bdcddd" font-size="9.5">matched schema</text>
-      <text x="193" y="252" fill="#9db7cd" font-size="9.2" font-weight="600" letter-spacing="1">JOINT DATA ONLY · NO VIDEO</text>
+      <text x="193" y="252" fill="#9db7cd" font-size="9.2" font-weight="600" letter-spacing="1">CAMERA OFF BY DEFAULT</text>
     </g>
   </svg>
 </svg>

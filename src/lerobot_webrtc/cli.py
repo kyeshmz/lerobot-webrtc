@@ -19,6 +19,7 @@ from .models import MODELS
 from .peer import Peer
 from .runtime import run_control
 from .signaling import create_app
+from .video import VIDEO_CODECS, VideoSettings
 
 
 def positive(value: str) -> float:
@@ -131,7 +132,27 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--turn", type=turn_url, help="TURN URL, e.g. turn:relay.example.com:3478"
         )
+        command.add_argument("--video-codec", choices=tuple(VIDEO_CODECS))
+        if role == "leader":
+            command.add_argument(
+                "--view-video",
+                type=server_port,
+                nargs="?",
+                const=8081,
+                help="Opt in to a native WebRTC browser viewer on 127.0.0.1 (default port 8081)",
+            )
         if role == "follower":
+            source = command.add_mutually_exclusive_group()
+            source.add_argument(
+                "--camera-index", type=int, help="Explicit LeRobot/OpenCV camera index"
+            )
+            source.add_argument(
+                "--test-video", action="store_true", help="Synthetic video, no camera"
+            )
+            command.add_argument("--video-width", type=int)
+            command.add_argument("--video-height", type=int)
+            command.add_argument("--video-fps", type=int)
+            command.add_argument("--camera-fourcc", help="Camera capture FOURCC, e.g. MJPG or YUYV")
             command.add_argument(
                 "--max-speed", type=positive, default=2.0, help="B601 target step rate, deg/s"
             )
@@ -195,7 +216,22 @@ def ice_servers(args) -> list[RTCIceServer]:
 
 
 async def endpoint(args, token: str) -> None:
-    peer = Peer(args.command, args.signaling, args.room, token, ice_servers(args))
+    media = {}
+    settings = getattr(args, "video_settings", None)
+    if settings is not None:
+        if args.command == "leader":
+            from .video_viewer import WebRTCViewer
+
+            media["video_viewer"] = WebRTCViewer(token, args.view_video, settings)
+        else:
+            from .video_sources import LeRobotCameraTrack, SyntheticVideoTrack
+
+            media["video_source"] = (
+                SyntheticVideoTrack(settings)
+                if args.test_video
+                else LeRobotCameraTrack(args.camera_index, settings)
+            )
+    peer = Peer(args.command, args.signaling, args.room, token, ice_servers(args), **media)
     try:
         if args.simulate:
             device = SimulatedArm(args.max_relative_target, args.robot)
@@ -240,7 +276,9 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    # Never enable aiohttp/aiortc DEBUG logs by default (SDP reveals IP addresses).
+    # Library DEBUG output includes full SDP and ephemeral ICE credentials.
+    for library in ("aiohttp", "aiortc", "aioice"):
+        logging.getLogger(library).setLevel(logging.WARNING)
     token = os.environ.get("LEROBOT_WEBRTC_TOKEN", "")
     if args.command != "calibrate" and len(token) < 16:
         root.error("Set LEROBOT_WEBRTC_TOKEN to a shared secret of at least 16 characters")
@@ -268,6 +306,33 @@ def main() -> None:
             if not 3 <= args.duration <= 15 or not 10 <= args.fps <= 30:
                 root.error("Bench requires duration 3–15 seconds and fps 10–30")
         else:
+            enabled_video = (
+                args.view_video is not None
+                if args.command == "leader"
+                else args.test_video or args.camera_index is not None
+            )
+            video_values = {
+                field: getattr(args, option)
+                for field, option in (
+                    ("width", "video_width"),
+                    ("height", "video_height"),
+                    ("fps", "video_fps"),
+                    ("codec", "video_codec"),
+                    ("fourcc", "camera_fourcc"),
+                )
+                if getattr(args, option, None) is not None
+            }
+            if not enabled_video and video_values:
+                root.error("Video settings require --view-video, --test-video, or --camera-index")
+            if args.command == "follower":
+                if args.camera_index is not None and args.camera_index < 0:
+                    root.error("Camera index must be nonnegative")
+                if args.camera_fourcc is not None and args.camera_index is None:
+                    root.error("Camera FOURCC requires --camera-index")
+            try:
+                args.video_settings = VideoSettings(**video_values) if enabled_video else None
+            except ValueError as exc:
+                root.error(str(exc))
             if args.fps > 100 or args.timeout > 2 or args.timeout < 2 / args.fps:
                 root.error("Use fps <= 100 and a timeout between two frame intervals and 2 seconds")
             if args.max_relative_target > 100:

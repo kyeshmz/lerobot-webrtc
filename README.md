@@ -14,7 +14,8 @@
 </div>
 
 **LeRobot WebRTC** transports joint-position actions between two computers using
-LeRobot's hardware interfaces and an encrypted WebRTC data channel.
+LeRobot's hardware interfaces and an encrypted WebRTC data channel. Video is off
+by default; opt in to one follower camera track and a local browser viewer.
 
 Use a physical SO-100/SO-101 **Teleoperator (leader)** to control a matching
 **Robot (follower)** remotely. An opt-in reBot B601-RS follower also supports a
@@ -22,7 +23,7 @@ bounded, encoder-checked move-and-hold test.
 
 This is a standalone companion to [🤗 LeRobot](https://github.com/huggingface/lerobot),
 not an official LeRobot component or an auto-discovered Robot/Teleoperator plugin.
-It does not provide camera streaming, dataset recording, policies, a browser UI,
+It does not provide dataset recording, policies, browser arm control, audio,
 force feedback, or automatic mapping between different arms.
 
 ## Highlights
@@ -31,6 +32,8 @@ force feedback, or automatic mapping between different arms.
   an opt-in B601-RS follower.
 - **Small transport:** encrypted P2P WebRTC, optional TURN, and signaling that
   never carries joint commands.
+- **Optional receive-only video:** native WebRTC to a loopback browser viewer,
+  with configurable codec, resolution, frame rate, and camera capture format.
 - **Try before connecting hardware:** a finite demo, provider examples, real
   WebRTC tests, and fake-bus SDK checks.
 
@@ -51,6 +54,9 @@ The demo starts separate signaling, simulated leader, and simulated follower
 processes, establishes real local WebRTC control, then cleans them up. It needs
 no serial ports, calibration, LeRobot hardware installation, or PyTorch. The
 subprocess demo currently requires POSIX signal handling.
+
+For a fully hardware-free video session, use the
+[synthetic video example](examples/video/README.md).
 
 > [!IMPORTANT]
 > Simulation verifies the transport and software lifecycle, not physical safety
@@ -128,6 +134,29 @@ Real followers require explicit `--arm` consent; a physical B601 bench also
 requires `--execute`. The default bench moves relative to its measured current
 pose and holds. Home/return-to-start is optional via `--require-return`.
 
+### Optional video
+
+The follower opts in with `--test-video` (synthetic) or `--camera-index INTEGER`
+(a real LeRobot OpenCV camera); the leader opts in with `--view-video [PORT]`
+(default `8081`). One video track travels follower → Python leader on the existing
+peer connection, then over a **second native WebRTC hop** into the local browser's
+HTML `<video>` MediaStream. It is not MJPEG, snapshot polling, or recording.
+The Python leader still reads the physical LeRobot teleoperator; the browser
+cannot send arm commands and captures no microphone or camera.
+
+Open `http://127.0.0.1:8081` on the leader computer, authenticate as `viewer` with
+the same `LEROBOT_WEBRTC_TOKEN` as password, then click **Connect**. The page and
+SDP use loopback-only HTTP with Basic authentication; the token is not put in the
+URL or logged. Browser connection precedes robot signaling; the leader waits for
+the first decoded robot frame before connecting its arm.
+
+Both endpoints must opt in. `--video-codec auto|vp8|h264` selects the network
+codec; follower resolution/FPS and `--camera-fourcc` select the source settings.
+See the [video settings and lifecycle](docs/usage.md#optional-video) and
+[three-terminal synthetic example](examples/video/README.md). **`--simulate`
+simulates arms, not cameras:** adding `--camera-index` still opens a real camera.
+`bench` and `calibrate` remain data-only.
+
 ### Cloudflare, TURN and other WebRTC services
 
 Start with the [examples index](examples/README.md):
@@ -135,6 +164,7 @@ Start with the [examples index](examples/README.md):
 | Example | Use it for |
 | --- | --- |
 | [Local P2P](examples/local/README.md) | A finite demo, no account or hardware |
+| [Local video](examples/video/README.md) | Synthetic video to a native WebRTC browser viewer, with simulated arms |
 | [Cloudflare Tunnel + TURN](examples/cloudflare/README.md) | WSS signaling and short-lived relay credentials |
 | [coturn](examples/coturn/README.md) | An authenticated relay you host |
 | [LiveKit](examples/livekit/README.md) | An optional, transport-only SDK probe—not robot control |
@@ -147,6 +177,10 @@ Realtime SFU endpoint is not interchangeable with this bridge's signaling URL.
 - Mount/support the unloaded arm, clear its sweep, and keep an independent
   physical power cutoff within reach. Connection can configure and enable motors.
 - `--arm` is startup consent, **not a hold-to-run dead-man switch**.
+- Video frame failure/idle or browser connection loss ends current control; no
+  automatic reconnect/resume. The browser is **not a safety-rated dead-man or
+  guaranteed physical stop**. Both WebRTC hops share CPU/network resources, so
+  video and control have no real-time guarantees.
 - Model/unit validation, follower-issued expiring permits, a latest-only mailbox,
   relative-target limits, and a local watchdog reject unsafe or stale software
   inputs. They are **not safety-rated collision, force, or real-time guarantees**.

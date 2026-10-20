@@ -1,5 +1,6 @@
 """Smoke-test a built distribution in a clean environment, outside its checkout."""
 
+import asyncio
 import importlib.util
 import subprocess
 import sys
@@ -7,6 +8,22 @@ from importlib.metadata import distribution
 from pathlib import Path
 
 import lerobot_webrtc
+
+
+async def check_synthetic_video():
+    from lerobot_webrtc.video import VideoSettings
+    from lerobot_webrtc.video_sources import SyntheticVideoTrack
+    from lerobot_webrtc.video_viewer import WebRTCViewer
+
+    viewer = WebRTCViewer("package-smoke-test-token", 0)
+    source = SyntheticVideoTrack(VideoSettings(width=32, height=32, fps=30))
+    try:
+        await source.start()
+        frame = await source.recv()
+        assert (frame.width, frame.height) == (32, 32)
+    finally:
+        await source.aclose()
+        await viewer.close()
 
 
 def main():
@@ -17,8 +34,10 @@ def main():
     assert installed.metadata["Requires-Python"] == ">=3.12"
     assert set(installed.metadata.get_all("Provides-Extra")) == {"hardware", "b601", "dev"}
     assert not any("git+" in item for item in installed.requires)
-    for optional in ("lerobot", "torch", "motorbridge"):
+    for optional in ("lerobot", "torch", "motorbridge", "numpy", "cv2", "PIL"):
         assert importlib.util.find_spec(optional) is None, f"Base install pulled in {optional}"
+
+    asyncio.run(check_synthetic_video())
 
     for prefix in (
         [sys.executable, "-m", "lerobot_webrtc"],

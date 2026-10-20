@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from aiohttp import ClientSession, WSMsgType
@@ -16,6 +17,12 @@ from aiortc import (
     RTCPeerConnection,
     RTCSessionDescription,
 )
+
+from .video import prefer_video_codec, validate_video_sdp
+
+if TYPE_CHECKING:
+    from .video_sources import LeRobotCameraTrack, SyntheticVideoTrack
+    from .video_viewer import WebRTCViewer
 
 logger = logging.getLogger(__name__)
 LABEL = "lerobot-actions-v1"
@@ -39,7 +46,14 @@ class Peer:
         room: str,
         token: str,
         ice_servers: list[RTCIceServer] | None = None,
+        *,
+        video_source: SyntheticVideoTrack | LeRobotCameraTrack | None = None,
+        video_viewer: WebRTCViewer | None = None,
     ):
+        if video_source is not None and role != "follower":
+            raise ValueError("Only the follower can send camera video")
+        if video_viewer is not None and role != "leader":
+            raise ValueError("Only the leader can host the video viewer")
         self.role = role
         self.url = f"{signaling.rstrip('/')}/ws/{room}/{role}"
         self.token = token
@@ -54,6 +68,30 @@ class Peer:
         self.signal_task: asyncio.Task | None = None
         self._connect_started = False
         self._close_task: asyncio.Task | None = None
+        self.video_source = video_source
+        self.video_viewer = video_viewer
+        self._video_seen = False
+
+        media = video_source if video_source is not None else video_viewer
+        if media is not None:
+            media.on_error = self.fail
+            transceiver = self.pc.addTransceiver(
+                "video", direction="sendonly" if video_source is not None else "recvonly"
+            )
+            prefer_video_codec(transceiver, media.settings.codec)
+
+        @self.pc.on("track")
+        def incoming_track(track):
+            if track.kind != "video" or self.video_viewer is None or self._video_seen:
+                track.stop()
+                self.fail(ValueError("Unexpected WebRTC media track"))
+                return
+            self._video_seen = True
+            try:
+                self.video_viewer.attach(track)
+            except Exception as exc:
+                track.stop()
+                self.fail(exc)
 
         @self.pc.on("connectionstatechange")
         def state_changed():
@@ -120,21 +158,39 @@ class Peer:
         if self._connect_started or self.closing or self.closed.is_set():
             raise RuntimeError("Peer connections are single-use")
         self._connect_started = True
-        self.signal_task = asyncio.create_task(self.signal(), name="signaling")
-        opened = asyncio.create_task(self.opened.wait())
-        closed = asyncio.create_task(self.closed.wait())
         try:
             async with asyncio.timeout(timeout):
-                await asyncio.wait({opened, closed}, return_when=asyncio.FIRST_COMPLETED)
+                if self.video_viewer is not None:
+                    await self.video_viewer.start()
+                    logger.info(
+                        "Video viewer: %s (user: viewer; password: LEROBOT_WEBRTC_TOKEN)",
+                        self.video_viewer.url,
+                    )
+                    await self._wait_until(self.video_viewer.browser_ready)
+                self.signal_task = asyncio.create_task(self.signal(), name="signaling")
+                await self._wait_until(self.opened)
+                if self.video_viewer is not None:
+                    await self._wait_until(self.video_viewer.ready)
+        except BaseException as primary:
+            try:
+                await self.close()
+            except BaseException as cleanup:
+                raise BaseExceptionGroup(
+                    "Peer setup and cleanup failed", [primary, cleanup]
+                ) from None
+            raise
+
+    async def _wait_until(self, event: asyncio.Event) -> None:
+        ready = asyncio.create_task(event.wait())
+        closed = asyncio.create_task(self.closed.wait())
+        try:
+            await asyncio.wait({ready, closed}, return_when=asyncio.FIRST_COMPLETED)
             if self.closed.is_set():
                 raise self.error or ConnectionError("Connection ended")
-        except BaseException:
-            await self.close()
-            raise
         finally:
-            for task in (opened, closed):
+            for task in (ready, closed):
                 task.cancel()
-            await asyncio.gather(opened, closed, return_exceptions=True)
+            await asyncio.gather(ready, closed, return_exceptions=True)
 
     async def signal(self) -> None:
         try:
@@ -166,9 +222,14 @@ class Peer:
                             continue
                         elif kind == "offer" and self.role == "follower" and not negotiated:
                             negotiated = True
-                            await self.pc.setRemoteDescription(
-                                RTCSessionDescription(_signaled_sdp(data), kind)
+                            sdp = _signaled_sdp(data)
+                            validate_video_sdp(
+                                sdp, "recvonly" if self.video_source is not None else None
                             )
+                            await self.pc.setRemoteDescription(RTCSessionDescription(sdp, kind))
+                            if self.video_source is not None:
+                                await self.video_source.start()
+                                self.pc.addTrack(self.video_source)
                             await self.pc.setLocalDescription(await self.pc.createAnswer())
                             await ws.send_json(
                                 {"type": "answer", "sdp": self.pc.localDescription.sdp}
@@ -177,9 +238,11 @@ class Peer:
                             if getattr(self, "answer_received", False):
                                 raise ValueError("Repeated signaling answer")
                             self.answer_received = True
-                            await self.pc.setRemoteDescription(
-                                RTCSessionDescription(_signaled_sdp(data), kind)
+                            sdp = _signaled_sdp(data)
+                            validate_video_sdp(
+                                sdp, "sendonly" if self.video_viewer is not None else None
                             )
+                            await self.pc.setRemoteDescription(RTCSessionDescription(sdp, kind))
                         else:
                             raise ValueError("Unexpected signaling response")
                     self.fail(ConnectionError("Signaling session ended; restart both peers"))
@@ -199,4 +262,18 @@ class Peer:
         if self.signal_task is not None and self.signal_task is not asyncio.current_task():
             self.signal_task.cancel()
             await asyncio.gather(self.signal_task, return_exceptions=True)
-        await self.pc.close()
+        errors = []
+        operations = [self.pc.close]
+        if self.video_source is not None:
+            operations.append(self.video_source.aclose)
+        if self.video_viewer is not None:
+            operations.append(self.video_viewer.close)
+        for close in operations:
+            try:
+                await close()
+            except BaseException as exc:
+                errors.append(exc)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BaseExceptionGroup("WebRTC/media cleanup failed", errors)

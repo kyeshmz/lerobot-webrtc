@@ -7,6 +7,7 @@ or create cloud resources automatically.
 | Example | What it demonstrates | Current bridge compatible? |
 | --- | --- | --- |
 | [Local P2P](local/README.md) | Finite, three-process signaling and real WebRTC control of simulated arms | Yes |
+| [Local video](video/README.md) | Synthetic follower video, simulated arms, and a receive-only native WebRTC browser viewer | Yes; both endpoints explicitly opt in |
 | [Cloudflare](cloudflare/README.md) | Tunnel for WSS signaling; short-lived Realtime TURN credentials | Yes; Tunnel and TURN have separate jobs |
 | [coturn](coturn/README.md) | An authenticated self-hosted STUN/TURN relay | Yes, through the existing `--stun` / `--turn` flags |
 | [LiveKit](livekit/README.md) | A finite, optional SDK data-packet probe and SFU references | Probe only; not a robot-control backend |
@@ -20,6 +21,10 @@ TURN credentials alone do **not** prove that a relay was selected. Test on the
 intended networks and inspect relay allocations/traffic. Network probes, simulated
 motor movement, submitted SDK packets, and physical encoder movement are different
 results; keep them labeled separately.
+
+Video is off by default. The local viewer adds a second native WebRTC hop, not
+browser arm control, audio, recording, or a safety-rated dead-man. `--simulate`
+only simulates arms: use `--test-video`, not `--camera-index`, to avoid real cameras.
 
 The examples never renew robot command permits, relax motor bounds, clear a STOP,
 or automatically resume a stopped bridge session.
